@@ -1,6 +1,13 @@
 import { readFileSync } from "node:fs";
 import { BadArgsError } from "./errors.ts";
 
+export interface HistoryExclusion {
+  account: string;
+  from: string;
+  to: string;
+  reason?: string;
+}
+
 export interface Config {
   apiBase: string;
   webOrigin: string;
@@ -12,6 +19,8 @@ export interface Config {
   usePublicCategories: boolean;
   /** Account types never reported as stale (valued assets such as property). */
   staleIgnoreTypes: string[];
+  /** Periods in which an account is left out of the net worth history (e.g. a stalled connection tracked by a manual duplicate). Never applied to today. */
+  historyExclusions: HistoryExclusion[];
   /** Google spreadsheet id for the sheets commands (optional; --spreadsheet overrides) */
   spreadsheetId?: string;
 }
@@ -25,6 +34,7 @@ export const DEFAULT_CONFIG: Config = {
   logDir: "./logs",
   usePublicCategories: true,
   staleIgnoreTypes: ["properties"],
+  historyExclusions: [],
 };
 
 export function parseConfig(obj: unknown): Config {
@@ -59,6 +69,21 @@ export function parseConfig(obj: unknown): Config {
       throw new BadArgsError("config.staleIgnoreTypes must be an array of account type strings");
     }
     c.staleIgnoreTypes = o.staleIgnoreTypes as string[];
+  }
+  if (o.historyExclusions !== undefined) {
+    if (!Array.isArray(o.historyExclusions)) throw new BadArgsError("config.historyExclusions must be an array");
+    c.historyExclusions = o.historyExclusions.map((e, i) => {
+      const at = `config.historyExclusions[${i}]`;
+      if (typeof e !== "object" || e === null || Array.isArray(e)) throw new BadArgsError(`${at} must be an object`);
+      const x = e as Record<string, unknown>;
+      if (typeof x.account !== "string" || x.account === "") throw new BadArgsError(`${at}.account must be an account id`);
+      for (const k of ["from", "to"]) {
+        if (typeof x[k] !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(x[k] as string)) throw new BadArgsError(`${at}.${k} must be YYYY-MM-DD`);
+      }
+      if ((x.from as string) > (x.to as string)) throw new BadArgsError(`${at}: from is after to`);
+      if (x.reason !== undefined && typeof x.reason !== "string") throw new BadArgsError(`${at}.reason must be a string`);
+      return { account: x.account, from: x.from as string, to: x.to as string, ...(x.reason !== undefined ? { reason: x.reason as string } : {}) };
+    });
   }
   try {
     new Intl.DateTimeFormat("en-GB", { timeZone: c.timezone });

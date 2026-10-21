@@ -2,6 +2,7 @@
 import type { SourceAccount } from "../backends/backend.ts";
 import { accountDisplayName, amountOf, archiveOf, isActive, netWorthValue } from "./accounts.ts";
 import { addDays, toLondonDate } from "./dates.ts";
+import type { HistoryExclusion } from "../config.ts";
 
 export const BUCKETS = ["cash", "savings", "card", "investment", "pension", "properties", "asset", "mortgage", "loan", "other"] as const;
 export type Bucket = (typeof BUCKETS)[number];
@@ -10,6 +11,22 @@ export type Interval = "day" | "week" | "month";
 export interface NetWorthPoint extends Record<Bucket, number> {
   date: string;
   net_worth: number;
+  /** true when a configured history exclusion left an account out on this day */
+  adjusted: boolean;
+}
+
+/** The exclusion covering `account` on `date`, if any. */
+const exclusionOn = (ex: readonly HistoryExclusion[], account: string, date: string): HistoryExclusion | undefined =>
+  ex.find((e) => e.account === account && e.from <= date && date <= e.to);
+
+/** How each exclusion applies to a series: the days it removed an active account (0 = matched nothing). */
+export function exclusionReport(raws: SourceAccount[], ex: readonly HistoryExclusion[], days: readonly string[], today: string) {
+  const ids = new Set(raws.filter(isActive).map((r) => r.uid));
+  return ex.map((e) => ({
+    ...e,
+    accountFound: ids.has(e.account),
+    days: ids.has(e.account) ? days.filter((d) => d !== today && e.from <= d && d <= e.to).length : 0,
+  }));
 }
 
 const isRec = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -69,10 +86,13 @@ function roundToTotal(sums: Record<Bucket, number>, totalPence: number): Record<
  * Rounding: `net_worth` is the unrounded sum rounded to pence, i.e. exactly netWorthTotal. Buckets are rounded
  * with the largest-remainder method so that they add up to `net_worth` to the penny; a bucket can therefore
  * differ by a penny from its independently rounded value. The total always wins.
+ *
+ * `exclusions` leave an account out on the days they cover (a stalled connection tracked twice, say). They are
+ * never applied to today, so today's point still equals the dashboard; days they change are marked `adjusted`.
  */
 export function networthSeries(
   raws: SourceAccount[],
-  opts: { from?: string; to?: string; interval?: Interval; now?: Date; tz?: string } = {},
+  opts: { from?: string; to?: string; interval?: Interval; now?: Date; tz?: string; exclusions?: readonly HistoryExclusion[] } = {},
 ): NetWorthPoint[] {
   const tz = opts.tz ?? "Europe/London";
   const now = opts.now ?? new Date();
@@ -81,18 +101,24 @@ export function networthSeries(
   const from = opts.from ?? firstBalanceDate(raws);
   if (from === null || from > to) return [];
   const active = raws.filter(isActive);
+  const exclusions = opts.exclusions ?? [];
   return seriesDays(from, to, opts.interval).map((date) => {
     const at = date === today ? now : new Date(date + "T12:00:00Z");
     const sums = Object.fromEntries(BUCKETS.map((b) => [b, 0])) as Record<Bucket, number>;
     let total = 0; // same order of addition as netWorthTotal
+    let adjusted = false;
     for (const r of active) {
+      if (date !== today && exclusions.length && exclusionOn(exclusions, r.uid, date)) {
+        adjusted = true;
+        continue;
+      }
       const v = netWorthValue(r, at, tz);
       sums[bucketOf(r.type)] += v;
       total += v;
     }
     const netWorth = Math.round(total * 100) / 100; // = netWorthTotal
     const pence = Math.round(netWorth * 100);
-    return { date, net_worth: netWorth, ...roundToTotal(sums, pence) };
+    return { date, net_worth: netWorth, ...roundToTotal(sums, pence), adjusted };
   });
 }
 

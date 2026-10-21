@@ -5,7 +5,7 @@ import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { netWorthTotal } from "../src/domain/accounts.ts";
-import { BUCKETS, firstBalanceDate, flattenBalances, networthSeries, seriesDays } from "../src/domain/history.ts";
+import { BUCKETS, exclusionReport, firstBalanceDate, flattenBalances, networthSeries, seriesDays } from "../src/domain/history.ts";
 import { fixtureDir, root } from "./helpers.ts";
 
 const acc = (uid: string, type: string, balances: unknown[], extra: Record<string, unknown> = {}): any => ({ uid, type, currency: "GBP", deleted: false, balances, ...extra });
@@ -25,7 +25,7 @@ test("series: step function per account, unknown types in other, deleted account
   assert.equal(s[0]!.date, "2026-01-01"); // the deleted account's earlier entry does not start the series
   assert.equal(s[s.length - 1]!.date, "2026-03-10");
   assert.equal(s.length, 31 + 28 + 10);
-  assert.deepEqual(Object.keys(s[0]!), ["date", "net_worth", ...BUCKETS]);
+  assert.deepEqual(Object.keys(s[0]!), ["date", "net_worth", ...BUCKETS, "adjusted"]);
   assert.deepEqual([at(s, "2026-01-01").cash, at(s, "2026-01-02").cash, at(s, "2026-01-03").cash, at(s, "2026-01-20").cash], [100, 100, 150, 150]);
   assert.equal(at(s, "2026-01-01").savings, 0); // before the first entry
   assert.equal(at(s, "2026-01-02").savings, 1000);
@@ -187,4 +187,21 @@ test("accounts balances: filters follow accounts list (deleted/archived hidden u
   assert.deepEqual(ids(["--to", "2026-01-31"]), ["a@2026-01-01"]);
   assert.equal(wps(["accounts", "balances", "--from", "x"], b).code, 5);
   assert.match(wps(["accounts", "balances", "--format", "table"], b).out, /^date\s+accountName/);
+});
+
+test("series: history exclusions leave an account out on their days, never today, and mark them adjusted", () => {
+  const raws = [
+    acc("auto", "investment", [{ date: "2026-01-01", amount: 100 }, { date: "2026-01-06", amount: 140 }]),
+    acc("manual", "investment", [{ date: "2026-01-03", amount: 120 }], { closed: "2026-01-06T09:00:00Z" }),
+  ];
+  const exclusions = [{ account: "auto", from: "2026-01-03", to: "2026-01-05" }];
+  const s = networthSeries(raws, { to: "2026-01-07", now: NOW, exclusions });
+  assert.deepEqual(s.map((p) => p.investment), [100, 100, 120, 120, 120, 140, 140]);
+  assert.deepEqual(s.map((p) => p.adjusted), [false, false, true, true, true, false, false]);
+  // covering today: ignored, so today's point still equals netWorthTotal
+  const today = networthSeries(raws, { from: "2026-03-10", now: NOW, exclusions: [{ account: "auto", from: "2026-03-01", to: "2026-03-31" }] });
+  assert.equal(today[0]!.net_worth, netWorthTotal(raws, NOW));
+  assert.equal(today[0]!.adjusted, false);
+  const rep = exclusionReport(raws, [...exclusions, { account: "nope", from: "2026-01-01", to: "2026-01-02" }], s.map((p) => p.date), "2026-03-10");
+  assert.deepEqual(rep.map((r) => [r.accountFound, r.days]), [[true, 3], [false, 0]]);
 });

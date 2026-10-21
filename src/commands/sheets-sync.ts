@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { loadCategoryIndex } from "../catalog.ts";
 import { BadArgsError, SinkError } from "../errors.ts";
 import { mapAccount, netWorthTotal } from "../domain/accounts.ts";
-import { flattenBalances, networthSeries } from "../domain/history.ts";
+import { exclusionReport, flattenBalances, networthSeries } from "../domain/history.ts";
 import { addDays, isDateString, toLondonDate } from "../domain/dates.ts";
 import { mergeByUid } from "../domain/merge.ts";
 import { mapTransaction } from "../domain/transactions.ts";
@@ -101,7 +101,10 @@ export const sheetsSync: CommandDef = {
 
     // Values over time: the history is rebuilt from the API every run; snapshots are append-only.
     const balanceRows = flattenBalances(rawAccounts, now).map(balanceRow);
-    const series = networthSeries(rawAccounts, { to: today, now, tz });
+    const exclusions = ctx.config.historyExclusions;
+    const series = networthSeries(rawAccounts, { to: today, now, tz, exclusions });
+    const excluded = exclusionReport(rawAccounts, exclusions, series.map((p) => p.date), today);
+    for (const e of excluded) if (!e.accountFound) ctx.log.warn(`history exclusion for account ${e.account}: no such active account`);
     const networthRows = series.map(networthRow);
     const snapshotRows = rawAccounts.map((r) => snapshotRow(mapAccount(r, now, tz), today, syncedAt, tz));
 
@@ -143,6 +146,8 @@ export const sheetsSync: CommandDef = {
       ["balances_total", balanceRows.length],
       ["networth_days", networthRows.length],
       ["networth_from", series[0]?.date ?? ""],
+      ["networth_adjusted_days", series.filter((p) => p.adjusted).length],
+      ["history_exclusions", JSON.stringify(excluded.map(({ account, from, to, reason, days }) => ({ account, from, to, reason, days })))],
       ["snapshots_appended", snap.appended],
       ["categories_total", categoryRows.length],
       ["projects_total", projectRows.length],

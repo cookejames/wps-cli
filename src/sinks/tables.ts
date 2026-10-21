@@ -41,7 +41,7 @@ export const RAW_BALANCES: TableDef = {
 };
 export const RAW_NETWORTH: TableDef = {
   sheet: "raw_networth",
-  cols: [c("date", "date"), c("net_worth", "amount"), ...BUCKETS.map((b) => c(b, "amount"))],
+  cols: [c("date", "date"), c("net_worth", "amount"), ...BUCKETS.map((b) => c(b, "amount")), c("adjusted", "boolean")],
 };
 /** Append-only: one row per account per sync day. */
 export const RAW_SNAPSHOTS: TableDef = {

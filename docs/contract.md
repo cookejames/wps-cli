@@ -139,7 +139,12 @@ what the web app shows, and the CLI must reproduce the dashboard's net worth fig
   from `--from` (default: the earliest dated balance of any active account) to `--to` (default today). Each day is
   evaluated with the rules above as of midday UTC that day (as `networth --date`; today uses the real clock), so the
   point for today equals `networth`'s total. `week` keeps each Sunday and `month` each month end, plus the `--to` day.
-  `data: [{date, net_worth, cash, savings, card, investment, pension, properties, asset, mortgage, loan, other}]`
+  `data: [{date, net_worth, cash, savings, card, investment, pension, properties, asset, mortgage, loan, other, adjusted}]`.
+  Config `historyExclusions` (`[{account, from, to, reason?}]`, inclusive dates) leaves an account out of the series on
+  those days, for history the source gets wrong (e.g. a stalled connection whose account is also tracked by a manual
+  duplicate, which counts it twice). They are never applied to today, so today's point still equals the dashboard;
+  days they change have `adjusted: true` (`*` in the table) and `meta.exclusions` reports each one with the days it
+  changed (`accountFound: false` and a warning when the id matches no active account).
   (plain numbers in pounds, ascending date; unknown types count under `other`). The buckets are the per-type sums of
   `netWorthValue` over active accounts. `net_worth` is exactly the net worth total; the buckets are rounded with the
   largest-remainder method so they add up to it to the penny, so a bucket can differ by 0.01 from its independent
@@ -196,7 +201,8 @@ become a formula. Numbers and booleans are JSON numbers/booleans. Dates are Shee
 - `raw_balances`: accountId, accountName, accountType, date (date), amount, entryType, tag, active, archived. One row per
   `balances[]` entry of every account (deleted and archived ones included, flagged). Rebuilt every run.
 - `raw_networth`: date (date), net_worth, cash, savings, card, investment, pension, properties, asset, mortgage, loan,
-  other. One row per day from the first balance date to today (the `networth history` series). Rebuilt every run.
+  other, adjusted (boolean). One row per day from the first balance date to today (the `networth history` series,
+  with `historyExclusions` applied). Rebuilt every run. Meta gains `networth_adjusted_days` and `history_exclusions`.
 - `raw_account_snapshots`: snapshot_date (date), accountId, name, type, balance, balanceDate (date), value, netWorthValue,
   netWorthEnabled, netWorthContribution, archived, active, synced_at (datetime). **Append-only**, see below.
 - `meta` (key | value): last_run_at, mode, window_from, window_to, transactions_total, added, updated, unchanged,

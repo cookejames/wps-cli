@@ -73,4 +73,10 @@ test("config parsing", () => {
   assert.throws(() => parseConfig({ windowDays: 0 }));
   assert.throws(() => parseConfig({ timezone: "Mars/Base" }));
   assert.throws(() => parseConfig([]));
+  assert.deepEqual(c.historyExclusions, []);
+  const ex = { account: "a1", from: "2026-01-01", to: "2026-02-01", reason: "duplicate" };
+  assert.deepEqual(parseConfig({ historyExclusions: [ex] }).historyExclusions, [ex]);
+  assert.throws(() => parseConfig({ historyExclusions: [{ ...ex, from: "2026-03-01" }] })); // from after to
+  assert.throws(() => parseConfig({ historyExclusions: [{ ...ex, to: "1 Feb" }] }));
+  assert.throws(() => parseConfig({ historyExclusions: [{ from: ex.from, to: ex.to }] }));
 });
