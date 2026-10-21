@@ -19,6 +19,8 @@ export interface Config {
   usePublicCategories: boolean;
   /** Account types never reported as stale (valued assets such as property). */
   staleIgnoreTypes: string[];
+  /** Account ids never reported as stale (balances that never change, e.g. premium bonds). */
+  staleIgnoreAccounts: string[];
   /** Periods in which an account is left out of the net worth history (e.g. a stalled connection tracked by a manual duplicate). Never applied to today. */
   historyExclusions: HistoryExclusion[];
   /** Google spreadsheet id for the sheets commands (optional; --spreadsheet overrides) */
@@ -34,6 +36,7 @@ export const DEFAULT_CONFIG: Config = {
   logDir: "./logs",
   usePublicCategories: true,
   staleIgnoreTypes: ["properties"],
+  staleIgnoreAccounts: [],
   historyExclusions: [],
 };
 
@@ -69,6 +72,12 @@ export function parseConfig(obj: unknown): Config {
       throw new BadArgsError("config.staleIgnoreTypes must be an array of account type strings");
     }
     c.staleIgnoreTypes = o.staleIgnoreTypes as string[];
+  }
+  if (o.staleIgnoreAccounts !== undefined) {
+    if (!Array.isArray(o.staleIgnoreAccounts) || !o.staleIgnoreAccounts.every((t) => typeof t === "string")) {
+      throw new BadArgsError("config.staleIgnoreAccounts must be an array of account ids");
+    }
+    c.staleIgnoreAccounts = o.staleIgnoreAccounts as string[];
   }
   if (o.historyExclusions !== undefined) {
     if (!Array.isArray(o.historyExclusions)) throw new BadArgsError("config.historyExclusions must be an array");

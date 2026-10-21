@@ -14,6 +14,7 @@ export const accountsList: CommandDef = {
     "include-archived": { type: "boolean" },
     archived: { type: "boolean" },
     "include-all-types": { type: "boolean" },
+    "include-ignored": { type: "boolean" },
   },
   needsSession: true,
   columns: ["id", "name", "provider", "type", "manual", "value.major", "balanceDate", "daysSinceUpdate", "archived"],
@@ -34,6 +35,8 @@ export const accountsList: CommandDef = {
     if (staleDays !== undefined) {
       // Valued assets (property by default, config.staleIgnoreTypes) aren't "updated" like balances.
       if (!a["include-all-types"]) list = list.filter((x) => !(x.type && ctx.config.staleIgnoreTypes.includes(x.type)));
+      // Accounts whose balance never changes (config.staleIgnoreAccounts).
+      if (!a["include-ignored"]) list = list.filter((x) => !ctx.config.staleIgnoreAccounts.includes(x.id));
       list = filterStale(list, staleDays);
     }
     list = sortByStaleness(list);

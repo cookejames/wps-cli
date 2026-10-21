@@ -8,6 +8,7 @@
   "standardCategoriesFile": "/path/outside/repo/standard-categories.json",
   "usePublicCategories": true,
   "staleIgnoreTypes": ["properties"],
+  "staleIgnoreAccounts": [],
   "historyExclusions": [
     { "account": "<account id>", "from": "2026-01-01", "to": "2026-03-31", "reason": "connection stalled; tracked by a manual account instead" }
   ],

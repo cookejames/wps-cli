@@ -127,7 +127,7 @@ what the web app shows, and the CLI must reproduce the dashboard's net worth fig
 
 - `session check`
 - `transactions list --from --to [--account] [--project] [--category] [--text] [--include-deleted] [--raw] [--limit]`
-- `accounts list [--type] [--manual] [--stale-days N] [--include-deleted] [--include-archived | --archived]`. Archived accounts (the web app's "Archived on", i.e. the source `closed` date is in the past) are hidden by default; `--archived` lists only those. With `--stale-days`, account types in config `staleIgnoreTypes` (default `["properties"]`) are left out unless `--include-all-types`.
+- `accounts list [--type] [--manual] [--stale-days N] [--include-deleted] [--include-archived | --archived]`. Archived accounts (the web app's "Archived on", i.e. the source `closed` date is in the past) are hidden by default; `--archived` lists only those. With `--stale-days`, account types in config `staleIgnoreTypes` (default `["properties"]`) are left out unless `--include-all-types`, and accounts in config `staleIgnoreAccounts` (ids of accounts whose balance never changes, e.g. premium bonds) unless `--include-ignored`.
 - `accounts set-balance --set <id>=<amount> [--set ...] [--date YYYY-MM-DD] [--yes]` (mutating). Records a balance on
   manual accounts, as the web app's "Update valuation" does: `PUT /apiv2/accounts/{id}/balances` with
   `{amount, date}`; an entry with the same date is replaced. `<id>` may be a unique prefix of 8+ characters; the

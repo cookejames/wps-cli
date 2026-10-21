@@ -91,6 +91,19 @@ test("accounts list --stale-days --include-all-types keeps property", () => {
   assert.equal(j.data[1].daysSinceUpdate, 81);
 });
 
+test("accounts list --stale-days leaves out config staleIgnoreAccounts unless --include-ignored", () => {
+  const dir = mkdtempSync(join(tmpdir(), "wps-ignore-"));
+  const cfg = join(dir, "config.json");
+  writeFileSync(cfg, JSON.stringify({ staleIgnoreAccounts: ["acc-manual-never"] }));
+  const base = ["accounts", "list", "--manual", "--stale-days", "30", "--include-all-types", "--config", cfg];
+  assert.deepEqual(wps(base, { env: fake }).json().data.map((a: any) => a.id), ["acc-manual-old"]);
+  assert.deepEqual(wps([...base, "--include-ignored"], { env: fake }).json().data.map((a: any) => a.id), ["acc-manual-never", "acc-manual-old"]);
+  // without --stale-days the list is unfiltered
+  assert.ok(wps(["accounts", "list", "--manual", "--config", cfg], { env: fake }).json().data.some((a: any) => a.id === "acc-manual-never"));
+  writeFileSync(cfg, JSON.stringify({ staleIgnoreAccounts: "acc-manual-never" }));
+  assert.equal(wps(base, { env: fake }).code, 5);
+});
+
 test("accounts list table format, stdin from /dev/null-like empty input", () => {
   const r = wps(["accounts", "list", "--manual", "--stale-days", "30", "--include-all-types", "--format", "table"], { env: fake });
   assert.equal(r.code, 0);
