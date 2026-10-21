@@ -233,7 +233,16 @@ export class SheetsSink {
     const have = sheets.find((s) => s.title === def.sheet);
     if (have) grid = await this.readValues(def.sheet);
     if (grid.length > 0 && JSON.stringify(grid[0]!.map(String)) !== JSON.stringify(header)) {
-      throw new SinkError(`${def.sheet} has an unexpected header row; not touching it`);
+      const old = grid[0]!.map(String);
+      // columns added at the end in a newer version: extend the header, leave earlier rows' new cells blank
+      const isPrefix = old.length < header.length && old.every((k, i) => k === header[i]);
+      if (!isPrefix) throw new SinkError(`${def.sheet} has an unexpected header row; not touching it`);
+      if (have!.columnCount < header.length) {
+        await this.batchUpdate([{ appendDimension: { sheetId: have!.sheetId, dimension: "COLUMNS", length: header.length - have!.columnCount } }]);
+      }
+      await this.writeValues(`${quoteSheet(def.sheet)}!A1`, [header], "RAW");
+      this.log?.info(`${def.sheet}: added column(s) ${header.slice(old.length).join(", ")}`);
+      grid = [header, ...grid.slice(1)];
     }
     if (grid.length === 0) {
       const info = await this.ensureSheets([{ title: def.sheet, rows: Math.max(rows.length + 1, 2), cols: header.length }]);

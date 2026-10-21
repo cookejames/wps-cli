@@ -389,7 +389,7 @@ test("sync: raw_account_snapshots is append-only across days; a same-day rerun r
   assert.deepEqual(g3.slice(0, 6), g1);
   assert.equal(day(g3, "2026-10-22").find((r) => r[1] === "acc-auto")![4], 77);
   const rerun = calls(dir).slice(before).filter((c) => JSON.stringify(c).includes("raw_account_snapshots"));
-  assert.ok(rerun.some((c) => c.method === "values clear" && c.params.range === "'raw_account_snapshots'!A7:M"));
+  assert.ok(rerun.some((c) => c.method === "values clear" && c.params.range === "'raw_account_snapshots'!A7:N"));
   assert.ok(!rerun.some((c) => c.method === "values update"), "no rewrite of the table");
   const meta = Object.fromEntries(grid(dir, "meta").slice(1).map((x: any[]) => [x[0], x[1]]));
   assert.equal(meta.snapshots_appended, 5);
@@ -459,4 +459,30 @@ test("init-dashboard --only networth works on a spreadsheet whose Transactions a
   const t = wps(["sheets", "init-dashboard", "--spreadsheet", "S", "--only", "transactions", "--force"], dir);
   assert.deepEqual(t.json().data, { sheet: "Transactions", reused: true });
   assert.equal(wps(["sheets", "init-dashboard", "--spreadsheet", "S", "--only", "x"], dir).code, 5);
+});
+
+test("backfill-snapshots: rebuilt month-end rows (then daily) before the first recorded day; recorded rows kept; re-runnable", () => {
+  const dir = newDir();
+  // a sheet from before the `source` column existed: the header is extended and these rows count as recorded
+  const oldHeader = RAW_SNAPSHOTS.cols.map((c) => c.key).filter((k) => k !== "source");
+  const recordedRow = [dateToSerial("2026-10-21"), "acc-auto", "Auto", "cash", 10.5, dateToSerial("2026-10-20"), 10.5, 10.5, true, 100, false, true, isoToSerial("2026-10-21T05:40:00Z", "Europe/London")];
+  seed(dir, [{ title: "raw_account_snapshots", values: [oldHeader, recordedRow] }]);
+  const r = wps(["sheets", "backfill-snapshots", "--spreadsheet", "S", "--from", "2026-08-15"], dir, {}, fixtureDir, "2026-10-22T12:00:00Z");
+  assert.equal(r.code, 0, r.err);
+  const d = r.json().data;
+  assert.equal(d.firstRecorded, "2026-10-21");
+  assert.equal(d.recordedKept, 1);
+  const g = grid(dir, "raw_account_snapshots");
+  assert.deepEqual(g[0], RAW_SNAPSHOTS.cols.map((c) => c.key));
+  const src = g[0].indexOf("source");
+  const days = [...new Set(g.slice(1).filter((x: any[]) => x[src] === "rebuilt").map((x: any[]) => serialToDate(x[0])))];
+  // month ends of Aug and Sep, then every day of October up to the day before the first recorded snapshot
+  assert.deepEqual(days, ["2026-08-31", "2026-09-30", ...Array.from({ length: 20 }, (_, i) => `2026-10-${String(i + 1).padStart(2, "0")}`)]);
+  const last = g[g.length - 1];
+  assert.deepEqual([last[1], last[src]], ["acc-auto", "recorded"]);
+  assert.deepEqual(last.slice(0, 13), recordedRow);
+  // running it again replaces the rebuilt rows rather than adding more
+  const again = wps(["sheets", "backfill-snapshots", "--spreadsheet", "S", "--from", "2026-08-15"], dir, {}, fixtureDir, "2026-10-22T12:00:00Z");
+  assert.equal(again.json().data.replacedRebuilt, d.rebuilt);
+  assert.equal(grid(dir, "raw_account_snapshots").length, g.length);
 });

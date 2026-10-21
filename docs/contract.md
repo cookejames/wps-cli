@@ -204,7 +204,8 @@ become a formula. Numbers and booleans are JSON numbers/booleans. Dates are Shee
   other, adjusted (boolean). One row per day from the first balance date to today (the `networth history` series,
   with `historyExclusions` applied). Rebuilt every run. Meta gains `networth_adjusted_days` and `history_exclusions`.
 - `raw_account_snapshots`: snapshot_date (date), accountId, name, type, balance, balanceDate (date), value, netWorthValue,
-  netWorthEnabled, netWorthContribution, archived, active, synced_at (datetime). **Append-only**, see below.
+  netWorthEnabled, netWorthContribution, archived, active, synced_at (datetime), source (`recorded` | `rebuilt`).
+  **Append-only**, see below.
 - `meta` (key | value): last_run_at, mode, window_from, window_to, transactions_total, added, updated, unchanged,
   missing_from_source, accounts_total, categories_total, projects_total, balances_total, networth_days, networth_from, snapshots_appended, net_worth (the net worth total), net_worth_as_of, wps_cli_version, status.
 
@@ -223,7 +224,16 @@ become a formula. Numbers and booleans are JSON numbers/booleans. Dates are Shee
   today's rows (one per account, same values as `raw_accounts`) with `values append` (`RAW`, `INSERT_ROWS`, chunked
   under the argument limit); earlier days are never rewritten. A re-run on the same day first clears today's rows when
   they are the trailing rows (a `values clear` of just that range) and appends fresh ones; if they are not at the end
-  the table is rewritten for that run. A sheet whose header row differs is refused (`sink_error`).
+  the table is rewritten for that run. A sheet whose header row differs is refused (`sink_error`), except one whose
+  header is a prefix of the current one (columns added in a newer version): the header is extended and earlier rows'
+  new cells stay blank (a blank `source` means recorded).
+- `sheets backfill-snapshots [--interval month|day] [--from YYYY-MM-DD] [--dry-run] [--spreadsheet <id>]` adds rows
+  with `source: rebuilt` for the days before the first recorded snapshot, worked out from the balance history with the
+  same rules as `networth --date` (midday UTC; `historyExclusions` set `netWorthValue` 0, as in `raw_networth`).
+  `month` (default): each month end, then every day of the month before the first recorded day, so the rows join up;
+  `day`: every day. From `--from` or the first balance date; accounts without a balance yet on a day are left out.
+  Recorded rows are kept as they are; earlier rebuilt rows are replaced, so it can be re-run. Rebuilt rows use the
+  accounts' current settings. One atomic rewrite of the table.
 - Output: `data: {mode, window:{from,to}, transactions:{total,added,updated,unchanged,missingFromSource}, accounts, categories, projects, balances, networth:{days,from,to}, snapshots:{date,rows}}`.
 
 **`sheets init-dashboard`.** Writes the `Transactions` sheet once: title and note in row 1, headers

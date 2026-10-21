@@ -138,6 +138,11 @@ switch (method) {
         const s = byId(r.addChart.chart.position.overlayPosition.anchorCell.sheetId);
         s.charts = [...(s.charts ?? []), r.addChart.chart];
         replies.push({ addChart: { chart: { chartId: 5000 + s.charts.length } } });
+      } else if (r.appendDimension) {
+        const s = byId(r.appendDimension.sheetId);
+        if (r.appendDimension.dimension === "COLUMNS") s.columnCount += r.appendDimension.length;
+        else s.rowCount += r.appendDimension.length;
+        replies.push({});
       } else if (r.repeatCell) {
         byId(r.repeatCell.range.sheetId).formats.push(r.repeatCell);
         replies.push({});

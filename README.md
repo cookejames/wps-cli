@@ -63,7 +63,8 @@ recorded balance. History uses the accounts' *current* settings (see `docs/api-n
 [`gws`](https://github.com/googleworkspace/cli) CLI, which must be installed and logged in with the Sheets scope.
 It also writes `raw_balances` (the balance history) and `raw_networth` (a daily net worth series by type), both
 rebuilt every run, and `raw_account_snapshots`, which only ever grows: one row per account per sync day, so the
-settings as they were each day are kept from now on.
+settings as they were each day are kept from now on. `wps sheets backfill-snapshots` fills the earlier history with
+month-end rows rebuilt from the balance history (marked `source: rebuilt`).
 `wps sheets init-dashboard` creates a `Transactions` sheet and a `Net worth` sheet (month-end table and two charts)
 built on those sheets, once each; `--only networth` adds just the second to a spreadsheet that already has Transactions. The app owns the
 `raw_*`/`ref_*`/`meta` sheets; you own everything else. Run `--backfill` first, then run the plain sync daily.

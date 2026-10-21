@@ -3,6 +3,7 @@ import { accountsBalances } from "./accounts-balances.ts";
 import { accountsList } from "./accounts-list.ts";
 import { categoriesList } from "./categories-list.ts";
 import { devExtractCategories } from "./dev-extract-categories.ts";
+import { sheetsBackfillSnapshots } from "./sheets-backfill-snapshots.ts";
 import { sheetsInitDashboard } from "./sheets-init-dashboard.ts";
 import { sheetsSync } from "./sheets-sync.ts";
 import { networth } from "./networth.ts";
@@ -24,6 +25,7 @@ export const commands: CommandDef[] = [
   devExtractCategories,
   sheetsSync,
   sheetsInitDashboard,
+  sheetsBackfillSnapshots,
 ];
 
 export function findCommand(group: string, name: string): CommandDef | undefined {

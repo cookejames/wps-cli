@@ -43,13 +43,16 @@ export const RAW_NETWORTH: TableDef = {
   sheet: "raw_networth",
   cols: [c("date", "date"), c("net_worth", "amount"), ...BUCKETS.map((b) => c(b, "amount")), c("adjusted", "boolean")],
 };
-/** Append-only: one row per account per sync day. */
+/**
+ * Append-only: one row per account per sync day (`source` "recorded"). `sheets backfill-snapshots` adds "rebuilt"
+ * rows for earlier days, worked out from the balance history.
+ */
 export const RAW_SNAPSHOTS: TableDef = {
   sheet: "raw_account_snapshots",
   cols: [
     c("snapshot_date", "date"), c("accountId"), c("name"), c("type"), c("balance", "amount"), c("balanceDate", "date"), c("value", "amount"),
     c("netWorthValue", "amount"), c("netWorthEnabled", "boolean"), c("netWorthContribution", "number"), c("archived", "boolean"),
-    c("active", "boolean"), c("synced_at", "datetime"),
+    c("active", "boolean"), c("synced_at", "datetime"), c("source"),
   ],
 };
 export const META: TableDef = { sheet: "meta", cols: [c("key"), c("value", "any")] };
@@ -112,10 +115,10 @@ export const balanceRow = (e: BalanceHistoryEntry): Row => ({
 });
 export const networthRow = (p: NetWorthPoint): Row => ({ ...p });
 /** One account on one sync day, from the mapped account (same values as raw_accounts). */
-export const snapshotRow = (a: Account, day: string, syncedAt: string, tz: string): Row => ({
+export const snapshotRow = (a: Account, day: string, syncedAt: string, tz: string, source: "recorded" | "rebuilt" = "recorded"): Row => ({
   snapshot_date: day, accountId: a.id, name: orNull(a.name), type: a.type, balance: a.balance ? a.balance.major : null, balanceDate: dateOnly(a.balanceDate),
   value: a.value ? a.value.major : null, netWorthValue: a.netWorthValue.major, netWorthEnabled: a.netWorthEnabled,
-  netWorthContribution: a.netWorthContribution, archived: a.archived, active: a.active, synced_at: iso(syncedAt, tz),
+  netWorthContribution: a.netWorthContribution, archived: a.archived, active: a.active, synced_at: iso(syncedAt, tz), source,
 });
 
 /** Typed row -> cell. Dates and datetimes become serial numbers; everything else is sent as-is (RAW). */

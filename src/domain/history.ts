@@ -16,8 +16,22 @@ export interface NetWorthPoint extends Record<Bucket, number> {
 }
 
 /** The exclusion covering `account` on `date`, if any. */
-const exclusionOn = (ex: readonly HistoryExclusion[], account: string, date: string): HistoryExclusion | undefined =>
+export const exclusionOn = (ex: readonly HistoryExclusion[], account: string, date: string): HistoryExclusion | undefined =>
   ex.find((e) => e.account === account && e.from <= date && date <= e.to);
+
+export const isExcludedOn = (ex: readonly HistoryExclusion[], account: string, date: string): boolean => exclusionOn(ex, account, date) !== undefined;
+
+/**
+ * Days for `sheets backfill-snapshots` over [from, end]: with `month`, each month end before end's month, then every
+ * day of end's month (so the rebuilt rows run daily into the first recorded snapshot); with `day`, every day.
+ */
+export function snapshotBackfillDays(from: string, end: string, interval: Interval = "month"): string[] {
+  if (from > end) return [];
+  if (interval !== "month") return seriesDays(from, end, "day");
+  const monthStart = end.slice(0, 8) + "01";
+  const before = monthStart > from ? seriesDays(from, addDays(monthStart, -1), "month") : [];
+  return [...before, ...seriesDays(monthStart > from ? monthStart : from, end, "day")];
+}
 
 /** How each exclusion applies to a series: the days it removed an active account (0 = matched nothing). */
 export function exclusionReport(raws: SourceAccount[], ex: readonly HistoryExclusion[], days: readonly string[], today: string) {
