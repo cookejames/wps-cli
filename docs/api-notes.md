@@ -45,8 +45,10 @@ Responses are `{"data":{"result":[...],"meta":{}}}` unless noted.
    `initial`. Caveat: the history carries no settings, so a past day is computed with the account's *current*
    `netWorthEnabled`, contribution %, `yearlyAppreciation` and `closed` date, and deleted accounts are missing
    entirely; `raw_account_snapshots` records the settings as they were from the first sync onward.
-   Manual balance edits (for a future `accounts set-balance`, not implemented): `PUT /apiv2/accounts/{uid}/balances`
-   with `{amount, date[, tag]}` (the web app's `updateBalance` mutation).
+   Manual balance edits (`accounts set-balance`): `PUT /apiv2/accounts/{uid}/balances` with `{amount, date[, tag]}`,
+   amount in major units and date `YYYY-MM-DD` like the stored entries (the web app's `updateBalance` mutation; its
+   `getBalance` makes mortgage/loan amounts `-Math.abs`). The web app also calls it once per entry when saving an
+   edited balance list, so it adds or replaces a single entry rather than replacing the list.
 5. `POST API/graphql` body `{query, variables}`; response `{"data":{...}}`, an `errors`
    array is a failure.
 

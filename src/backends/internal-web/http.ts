@@ -38,7 +38,7 @@ export class HttpClient {
   }
 
   /** Requests run one at a time, with a jittered pause between consecutive ones. */
-  request(method: "GET" | "POST", path: string, body?: unknown): Promise<unknown> {
+  request(method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<unknown> {
     const run = async () => {
       if (this.requests++ > 0) {
         const [lo, hi] = this.pauseMs;
@@ -52,7 +52,7 @@ export class HttpClient {
     return p;
   }
 
-  private async send(method: "GET" | "POST", path: string, body?: unknown): Promise<unknown> {
+  private async send(method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<unknown> {
     const headers = this.headers();
     if (body !== undefined) headers["content-type"] = "application/json";
     let res: Response;

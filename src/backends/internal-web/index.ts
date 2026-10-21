@@ -49,6 +49,11 @@ export class InternalWebBackend implements Backend {
     return items as SourceAccount[];
   }
 
+  /** The web app's updateBalance: PUT /apiv2/accounts/{uid}/balances {amount, date}. */
+  async setBalance(accountId: string, entry: { amount: number; date: string }): Promise<void> {
+    await this.http.request("PUT", `/apiv2/accounts/${encodeURIComponent(accountId)}/balances`, { amount: entry.amount, date: entry.date });
+  }
+
   async listProjects(): Promise<Project[]> {
     const body = await this.http.request("POST", "/graphql", { query: PROJECTS_QUERY, variables: {} });
     if (!isRec(body)) throw new UpstreamError("graphql: unexpected response shape");

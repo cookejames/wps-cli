@@ -1,6 +1,7 @@
 // Register every command here. Adding a command = one new file + one line below.
 import { accountsBalances } from "./accounts-balances.ts";
 import { accountsList } from "./accounts-list.ts";
+import { accountsSetBalance } from "./accounts-set-balance.ts";
 import { categoriesList } from "./categories-list.ts";
 import { devExtractCategories } from "./dev-extract-categories.ts";
 import { sheetsBackfillSnapshots } from "./sheets-backfill-snapshots.ts";
@@ -18,6 +19,7 @@ export const commands: CommandDef[] = [
   transactionsList,
   accountsList,
   accountsBalances,
+  accountsSetBalance,
   networth,
   networthHistory,
   categoriesList,

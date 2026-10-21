@@ -219,3 +219,44 @@ test("networth table format: lines and a TOTAL; --by type", () => {
   assert.ok(wps(["networth", "--help"]).out.includes("--date"));
   assert.ok(wps(["--help"]).out.includes("networth"));
 });
+
+test("accounts set-balance: dry-run by default, --yes writes, audits and reads back; refuses connected/deleted/ambiguous", async () => {
+  const { cpSync } = await import("node:fs");
+  const backend = mkdtempSync(join(tmpdir(), "wps-setbal-"));
+  cpSync(fixtureDir, backend, { recursive: true });
+  const logDir = mkdtempSync(join(tmpdir(), "wps-audit-"));
+  const cfg = join(logDir, "config.json");
+  writeFileSync(cfg, JSON.stringify({ logDir }));
+  const env = { WPS_FAKE_BACKEND: backend, WPS_FAKE_NOW: NOW };
+  const run = (...args: string[]) => wps(["accounts", "set-balance", "--config", cfg, ...args], { env });
+
+  const dry = run("--set", "acc-manual-new=1,500.25");
+  assert.equal(dry.code, 0, dry.err);
+  assert.deepEqual(dry.json().data.map((c: any) => [c.id, c.oldBalance, c.amount, c.date, c.status]), [["acc-manual-new", 1234.56, 1500.25, "2026-10-21", "dry-run"]]);
+  assert.equal(dry.json().meta.dryRun, true);
+  assert.throws(() => readFileSync(join(backend, "set-balance.json"))); // nothing sent
+
+  const yes = run("--set", "acc-manual-new=1500.25", "--set", "acc-manual-old=260000", "--date", "2026-10-20", "--yes");
+  assert.equal(yes.code, 0, yes.err);
+  assert.deepEqual(yes.json().data.map((c: any) => c.status), ["updated", "updated"]);
+  assert.deepEqual(JSON.parse(readFileSync(join(backend, "set-balance.json"), "utf8")), [
+    { accountId: "acc-manual-new", amount: 1500.25, date: "2026-10-20" },
+    { accountId: "acc-manual-old", amount: 260000, date: "2026-10-20" },
+  ]);
+  const audit = readFileSync(join(logDir, "audit.log"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  assert.deepEqual(audit.map((l) => [l.command, l.target, l.change.to]), [["accounts set-balance", "acc-manual-new", 1500.25], ["accounts set-balance", "acc-manual-old", 260000]]);
+
+  for (const [args, msg] of [
+    [["--set", "acc-auto00=5"], /no account/],
+    [["--set", "acc-auto=5"], /connected account/],
+    [["--set", "acc-deleted=5"], /deleted/],
+    [["--set", "acc-manual=5"], /matches 3 accounts/],
+    [["--set", "acc-manual-new=12.345"], /2 decimals/],
+    [["--set", "acc-manual-new=5", "--date", "2030-01-01"], /future/],
+    [[], /at least one/],
+  ] as [string[], RegExp][]) {
+    const r = run(...args, "--yes");
+    assert.equal(r.code, 5, args.join(" "));
+    assert.match(r.json().reason ?? r.json().error ?? JSON.stringify(r.json()), msg);
+  }
+});

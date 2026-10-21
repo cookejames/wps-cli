@@ -67,4 +67,6 @@ export interface Backend {
   listAccounts(): Promise<SourceAccount[]>;
   listProjects(): Promise<Project[]>;
   getCategoryNames(): Promise<CategoryNames>;
+  /** Add (or replace, for the same date) a balance entry of a manual account: amount in major units, date YYYY-MM-DD. */
+  setBalance(accountId: string, entry: { amount: number; date: string }): Promise<void>;
 }

@@ -128,6 +128,15 @@ what the web app shows, and the CLI must reproduce the dashboard's net worth fig
 - `session check`
 - `transactions list --from --to [--account] [--project] [--category] [--text] [--include-deleted] [--raw] [--limit]`
 - `accounts list [--type] [--manual] [--stale-days N] [--include-deleted] [--include-archived | --archived]`. Archived accounts (the web app's "Archived on", i.e. the source `closed` date is in the past) are hidden by default; `--archived` lists only those. With `--stale-days`, account types in config `staleIgnoreTypes` (default `["properties"]`) are left out unless `--include-all-types`.
+- `accounts set-balance --set <id>=<amount> [--set ...] [--date YYYY-MM-DD] [--yes]` (mutating). Records a balance on
+  manual accounts, as the web app's "Update valuation" does: `PUT /apiv2/accounts/{id}/balances` with
+  `{amount, date}`; an entry with the same date is replaced. `<id>` may be a unique prefix of 8+ characters; the
+  amount may contain `£` and commas, at most 2 decimals; mortgage and loan amounts are stored negative whatever the
+  sign typed (as the web app). `--date` defaults to today and cannot be in the future. Everything is checked before
+  anything is sent: connected (auto), deleted and archived accounts are refused (exit 5). Without `--yes` it is a
+  dry run that prints the changes. With `--yes` each change is appended to `<logDir>/audit.log` (account id, old and
+  new balance, date), sent, then read back: `status: "updated"` when the balance in force on that date is the new
+  amount, otherwise exit 3. `data: [{id, name, type, oldBalance, oldBalanceDate, amount, date, status}]`.
   Table columns: id, name, provider, type, manual, value.major, balanceDate, daysSinceUpdate, archived. JSON adds
   `value`, `netWorthValue`, `netWorthEnabled`, `netWorthContribution` (default 100), `yearlyAppreciation`, `active`.
 - `networth [--by type|account] [--date YYYY-MM-DD]`. The dashboard's net worth (rules above); `--date` evaluates them
