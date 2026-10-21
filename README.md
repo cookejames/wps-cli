@@ -43,6 +43,18 @@ Output is one JSON document on stdout:
 `{"status":"ok","command":"...","data":...,"meta":...}`; see `docs/contract.md`
 for exit codes and the full contract, and `docs/api-notes.md` for the endpoints.
 
+## Google Sheets
+
+`wps sheets sync [--backfill]` copies transactions, accounts, categories and projects into `raw_*`, `ref_*` and
+`meta` sheets of a Google spreadsheet (set `spreadsheetId` in the config or pass `--spreadsheet`), using the
+[`gws`](https://github.com/googleworkspace/cli) CLI, which must be installed and logged in with the Sheets scope.
+`wps sheets init-dashboard` creates a `Transactions` sheet built on those sheets, once. The app owns the
+`raw_*`/`ref_*`/`meta` sheets; you own everything else. Run `--backfill` first, then run the plain sync daily.
+
+    my-session-helper | bin/wps sheets sync --backfill
+    my-session-helper | bin/wps sheets sync            # rolling window (windowDays)
+    bin/wps sheets init-dashboard
+
 ## Adding a command
 
 1. Create `src/commands/<group>-<name>.ts` exporting `{group, name, summary, options, needsSession, mutating?, columns?, run(ctx)}`.

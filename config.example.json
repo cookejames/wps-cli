@@ -6,5 +6,6 @@
   "windowDays": 45,
   "logDir": "./logs",
   "standardCategoriesFile": "/path/outside/repo/standard-categories.json",
-  "usePublicCategories": true
+  "usePublicCategories": true,
+  "spreadsheetId": "<google-spreadsheet-id>"
 }

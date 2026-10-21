@@ -10,6 +10,8 @@ export interface Config {
   logDir: string;
   standardCategoriesFile?: string;
   usePublicCategories: boolean;
+  /** Google spreadsheet id for the sheets commands (optional; --spreadsheet overrides) */
+  spreadsheetId?: string;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -38,6 +40,7 @@ export function parseConfig(obj: unknown): Config {
   c.timezone = str("timezone") ?? c.timezone;
   c.logDir = str("logDir") ?? c.logDir;
   c.standardCategoriesFile = str("standardCategoriesFile");
+  c.spreadsheetId = str("spreadsheetId");
   if (o.windowDays !== undefined) {
     if (typeof o.windowDays !== "number" || !Number.isInteger(o.windowDays) || o.windowDays < 1) {
       throw new BadArgsError("config.windowDays must be a positive integer");
