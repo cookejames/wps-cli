@@ -25,7 +25,7 @@ Needs Node 22+. Run via `bin/wps` (a shim that runs the TypeScript through `tsx`
 The tool never logs in. You pipe a session on stdin, as JSON, taken from a logged-in
 browser:
 
-    {"cookie":"<Cookie header value>","csrf":"<csrf token>"}
+    {"cookie":"<Cookie header value>","csrf":"<csrf token>","userAgent":"<optional>"}
 
 It is held in memory only: never written to disk, logged or printed (all stderr and
 error text is redacted). Sessions are short-lived, so fetch one just before each run.

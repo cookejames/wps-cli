@@ -6,8 +6,8 @@ time. Hosts below are placeholders: `API` = config `apiBase`, `WEB` = config `we
 ## Auth
 
 An httpOnly session cookie on the API host plus a `csrf-token` header. Every request sends:
-`cookie`, `csrf-token`, `accept: application/json`, a desktop Firefox `user-agent`,
-and `origin`/`referer` = `WEB`. 401/403, or a body of `Invalid csrf` /
+`cookie`, `csrf-token`, `accept: application/json, text/plain, */*`, `accept-language`, a desktop Firefox `user-agent`
+(or the session's `userAgent`), `origin` = `WEB` (mandatory: profile gives 403 and graphql 401 without it) and `referer` = `WEB/`. 401/403, or a body of `Invalid csrf` /
 `No csrf found in headers`, means the session is invalid. The session expires
 after a short sliding window (about 15 minutes).
 

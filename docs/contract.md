@@ -16,7 +16,10 @@ Global flags (given after the command): `--config <path>` (or env `WPS_CONFIG`),
 
 Commands that talk to the API read a session as JSON on **stdin**:
 
-    {"cookie":"<Cookie header value>","csrf":"<csrf token>"}
+    {"cookie":"<Cookie header value>","csrf":"<csrf token>","userAgent":"<optional>"}
+
+An optional third field `"userAgent"` is sent verbatim as the `user-agent` header
+(it is not secret); otherwise a current desktop Firefox UA is used.
 
 If stdin is a TTY or empty, the JSON is invalid, or a field is missing or empty,
 the result is `auth_failed` (exit 2). The session is held in memory only: it is
@@ -27,6 +30,14 @@ JWT-shaped.
 
 Sessions are short-lived (a sliding expiry of the order of 15 minutes); obtain a
 fresh one right before running.
+
+## Request headers and pacing
+
+Every API request is built by one shared header builder: `cookie`, `csrf-token`,
+`accept: application/json, text/plain, */*`, `accept-language: en-GB,en;q=0.9`,
+`user-agent`, `origin: <webOrigin>` (mandatory: without it the API answers 403/401)
+and `referer: <webOrigin>/`. Requests within one command run sequentially with a
+random 300-600 ms pause between them.
 
 ## Output
 
