@@ -8,7 +8,7 @@ const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /** Amount as major units from a number or {amount|value: number|{value}} (tolerant). */
-function amountOf(v: unknown): number | null {
+export function amountOf(v: unknown): number | null {
   const n = num(v);
   if (n !== null) return n;
   if (isRec(v)) return amountOf(v.amount) ?? amountOf(v.value);
@@ -73,23 +73,43 @@ const dayOf = (d: string): string => d.slice(0, 10);
  * No dated entries: the last entry. Empty or missing array: undefined.
  */
 export function balanceForDate(balances: unknown, onDate: string): BalanceEntry | undefined {
+  const p = prepareBalances(balances);
+  if (!p) return undefined;
+  const { all, dated } = p;
+  if (dated.length === 0) return all[all.length - 1];
+  if (onDate < dayOf(dated[0]!.date!)) return undefined;
+  if (dayOf(dated[dated.length - 1]!.date!) <= onDate) return dated[dated.length - 1];
+  // binary search for the last entry dated on or before onDate
+  let lo = 0;
+  let hi = dated.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (dayOf(dated[mid]!.date!) <= onDate) lo = mid;
+    else hi = mid - 1;
+  }
+  return dated[lo];
+}
+
+interface Prepared { all: BalanceEntry[]; dated: BalanceEntry[]; length: number }
+// A history is looked up once per day per account when building a series, so normalise and sort it once.
+const preparedCache = new WeakMap<object, Prepared>();
+
+function prepareBalances(balances: unknown): Prepared | undefined {
   if (!Array.isArray(balances)) return undefined;
+  const hit = preparedCache.get(balances);
+  if (hit && hit.length === balances.length) return hit.all.length === 0 ? undefined : hit;
   const all: BalanceEntry[] = balances
     .filter(isRec)
     .map((b) => ({ date: str(b.date), amount: amountOf(b.amount), tag: str(b.tag) }));
-  if (all.length === 0) return undefined;
   const dated = all.filter((b) => b.date !== null);
-  if (dated.length === 0) return all[all.length - 1];
   dated.sort((x, y) => {
     const c = dayOf(x.date!).localeCompare(dayOf(y.date!));
     if (c !== 0) return c;
     return (x.tag === "initial" ? 0 : 1) - (y.tag === "initial" ? 0 : 1);
   });
-  if (onDate < dayOf(dated[0]!.date!)) return undefined;
-  if (dayOf(dated[dated.length - 1]!.date!) <= onDate) return dated[dated.length - 1];
-  let found: BalanceEntry | undefined;
-  for (const b of dated) if (dayOf(b.date!) <= onDate) found = b;
-  return found;
+  const p = { all, dated, length: balances.length };
+  preparedCache.set(balances, p);
+  return all.length === 0 ? undefined : p;
 }
 
 const round2 = (x: number): number => Math.round(x * 100) / 100;
