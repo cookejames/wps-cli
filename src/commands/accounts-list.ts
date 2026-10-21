@@ -13,6 +13,7 @@ export const accountsList: CommandDef = {
     "include-deleted": { type: "boolean" },
     "include-archived": { type: "boolean" },
     archived: { type: "boolean" },
+    "include-all-types": { type: "boolean" },
   },
   needsSession: true,
   columns: ["id", "name", "provider", "type", "manual", "balance.major", "currency", "lastUpdated", "daysSinceUpdate", "archived"],
@@ -30,7 +31,11 @@ export const accountsList: CommandDef = {
     else if (!a["include-archived"]) list = list.filter((x) => !x.archived);
     if (typeof a.type === "string") list = list.filter((x) => x.type === a.type);
     if (a.manual) list = list.filter((x) => x.manual);
-    if (staleDays !== undefined) list = filterStale(list, staleDays);
+    if (staleDays !== undefined) {
+      // Valued assets (property by default, config.staleIgnoreTypes) aren't "updated" like balances.
+      if (!a["include-all-types"]) list = list.filter((x) => !(x.type && ctx.config.staleIgnoreTypes.includes(x.type)));
+      list = filterStale(list, staleDays);
+    }
     list = sortByStaleness(list);
     return { data: list, meta: { count: list.length, asOf: now.toISOString() } };
   },

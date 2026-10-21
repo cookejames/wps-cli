@@ -75,17 +75,24 @@ test("--help lists commands from the registry", () => {
   assert.ok(h.out.includes("--include-deleted"));
 });
 
-test("accounts list --manual --stale-days 30 (json)", () => {
+test("accounts list --manual --stale-days 30 (json): property is left out by default", () => {
   const r = wps(["accounts", "list", "--manual", "--stale-days", "30"], { env: fake });
+  assert.equal(r.code, 0);
+  const j = r.json();
+  assert.deepEqual(j.data.map((a: any) => a.id), ["acc-manual-never"]);
+  assert.ok(!r.out.includes("SENSITIVE"));
+});
+
+test("accounts list --stale-days --include-all-types keeps property", () => {
+  const r = wps(["accounts", "list", "--manual", "--stale-days", "30", "--include-all-types"], { env: fake });
   assert.equal(r.code, 0);
   const j = r.json();
   assert.deepEqual(j.data.map((a: any) => a.id), ["acc-manual-never", "acc-manual-old"]);
   assert.equal(j.data[1].daysSinceUpdate, 81);
-  assert.ok(!r.out.includes("SENSITIVE"));
 });
 
 test("accounts list table format, stdin from /dev/null-like empty input", () => {
-  const r = wps(["accounts", "list", "--manual", "--stale-days", "30", "--format", "table"], { env: fake });
+  const r = wps(["accounts", "list", "--manual", "--stale-days", "30", "--include-all-types", "--format", "table"], { env: fake });
   assert.equal(r.code, 0);
   assert.match(r.out, /^id\s+name/);
   assert.ok(r.out.includes("Example House"));

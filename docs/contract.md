@@ -106,7 +106,7 @@ To add a command: create one file in `src/commands/` and register it in
 
 - `session check`
 - `transactions list --from --to [--account] [--project] [--category] [--text] [--include-deleted] [--raw] [--limit]`
-- `accounts list [--type] [--manual] [--stale-days N] [--include-deleted] [--include-archived | --archived]`. Archived accounts (the web app's "Archived on", i.e. the source `closed` date is in the past) are hidden by default; `--archived` lists only those.
+- `accounts list [--type] [--manual] [--stale-days N] [--include-deleted] [--include-archived | --archived]`. Archived accounts (the web app's "Archived on", i.e. the source `closed` date is in the past) are hidden by default; `--archived` lists only those. With `--stale-days`, account types in config `staleIgnoreTypes` (default `["properties"]`) are left out unless `--include-all-types`.
 - `categories list [--custom-only]`
 - `projects list`
 - `dev extract-categories (--bundle-url <url>... | --bundle-file <path>...) [--out <path>]` (no session)

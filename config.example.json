@@ -7,5 +7,6 @@
   "logDir": "./logs",
   "standardCategoriesFile": "/path/outside/repo/standard-categories.json",
   "usePublicCategories": true,
+  "staleIgnoreTypes": ["properties"],
   "spreadsheetId": "<google-spreadsheet-id>"
 }

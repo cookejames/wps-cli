@@ -10,6 +10,8 @@ export interface Config {
   logDir: string;
   standardCategoriesFile?: string;
   usePublicCategories: boolean;
+  /** Account types never reported as stale (valued assets such as property). */
+  staleIgnoreTypes: string[];
   /** Google spreadsheet id for the sheets commands (optional; --spreadsheet overrides) */
   spreadsheetId?: string;
 }
@@ -22,6 +24,7 @@ export const DEFAULT_CONFIG: Config = {
   windowDays: 45,
   logDir: "./logs",
   usePublicCategories: true,
+  staleIgnoreTypes: ["properties"],
 };
 
 export function parseConfig(obj: unknown): Config {
@@ -50,6 +53,12 @@ export function parseConfig(obj: unknown): Config {
   if (o.usePublicCategories !== undefined) {
     if (typeof o.usePublicCategories !== "boolean") throw new BadArgsError("config.usePublicCategories must be a boolean");
     c.usePublicCategories = o.usePublicCategories;
+  }
+  if (o.staleIgnoreTypes !== undefined) {
+    if (!Array.isArray(o.staleIgnoreTypes) || !o.staleIgnoreTypes.every((t) => typeof t === "string")) {
+      throw new BadArgsError("config.staleIgnoreTypes must be an array of account type strings");
+    }
+    c.staleIgnoreTypes = o.staleIgnoreTypes as string[];
   }
   try {
     new Intl.DateTimeFormat("en-GB", { timeZone: c.timezone });
