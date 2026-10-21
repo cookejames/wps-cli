@@ -106,7 +106,7 @@ To add a command: create one file in `src/commands/` and register it in
 
 - `session check`
 - `transactions list --from --to [--account] [--project] [--category] [--text] [--include-deleted] [--raw] [--limit]`
-- `accounts list [--type] [--manual] [--stale-days N] [--include-deleted]`
+- `accounts list [--type] [--manual] [--stale-days N] [--include-deleted] [--include-archived | --archived]`. Archived accounts (the web app's "Archived on", i.e. the source `closed` date is in the past) are hidden by default; `--archived` lists only those.
 - `categories list [--custom-only]`
 - `projects list`
 - `dev extract-categories (--bundle-url <url>... | --bundle-file <path>...) [--out <path>]` (no session)
@@ -146,7 +146,7 @@ become a formula. Numbers and booleans are JSON numbers/booleans. Dates are Shee
 - `ref_categories`: categoryId, internalId, key, name, groupId, groupKey, groupName, custom.
 - `ref_projects`: id, name, type.
 - `raw_accounts`: id, name, provider, type, accountType, auto, manual, balance, currency, balanceDate (date),
-  providerLastUpdated (datetime), lastUpdated (date), daysSinceUpdate, deleted, netWorthContribution
+  providerLastUpdated (datetime), lastUpdated (date), daysSinceUpdate, deleted, netWorthContribution, archived, archivedAt (datetime)
   (no parties, sort codes, IBANs or account numbers).
 - `meta` (key | value): last_run_at, mode, window_from, window_to, transactions_total, added, updated, unchanged,
   missing_from_source, accounts_total, categories_total, projects_total, wps_cli_version, status.

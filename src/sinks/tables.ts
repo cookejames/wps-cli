@@ -30,6 +30,7 @@ export const ACCOUNTS: TableDef = {
     c("id"), c("name"), c("provider"), c("type"), c("accountType"), c("auto", "boolean"), c("manual", "boolean"),
     c("balance", "amount"), c("currency"), c("balanceDate", "date"), c("providerLastUpdated", "datetime"), c("lastUpdated", "date"),
     c("daysSinceUpdate", "number"), c("deleted", "boolean"), c("netWorthContribution", "number"),
+    c("archived", "boolean"), c("archivedAt", "datetime"),
   ],
 };
 export const META: TableDef = { sheet: "meta", cols: [c("key"), c("value", "any")] };
@@ -81,6 +82,7 @@ export const accountRow = (a: Account, tz: string): Row => ({
   balance: a.balance ? a.balance.major : null, currency: a.currency, balanceDate: dateOnly(a.balanceDate),
   providerLastUpdated: iso(a.providerLastUpdated, tz), lastUpdated: dateOnly(a.lastUpdated), daysSinceUpdate: a.daysSinceUpdate,
   deleted: a.deleted, netWorthContribution: a.netWorthContribution ?? null,
+  archived: a.archived, archivedAt: iso(a.archivedAt, tz),
 });
 
 /** Typed row -> cell. Dates and datetimes become serial numbers; everything else is sent as-is (RAW). */

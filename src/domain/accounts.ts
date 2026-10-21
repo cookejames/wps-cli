@@ -60,6 +60,14 @@ export function accountDisplayName(raw: SourceAccount): string {
   return fallback || name || "";
 }
 
+/** The web app treats an account as archived when `closed` is set and in the past (isClosed). */
+export function archiveOf(closed: unknown, now: Date): { archived: boolean; archivedAt: string | null } {
+  if (closed === true) return { archived: true, archivedAt: null };
+  const at = str(closed);
+  if (!at || Number.isNaN(Date.parse(at))) return { archived: false, archivedAt: null };
+  return { archived: Date.parse(at) <= now.getTime(), archivedAt: at };
+}
+
 export function mapAccount(raw: SourceAccount, now: Date = new Date()): Account {
   const auto = raw.auto === true;
   const currency = str(raw.currency) ?? "GBP";
@@ -91,6 +99,7 @@ export function mapAccount(raw: SourceAccount, now: Date = new Date()): Account 
     lastUpdated,
     daysSinceUpdate,
     deleted: raw.deleted === true,
+    ...archiveOf(raw.closed, now),
   };
   if (nw !== null) a.netWorthContribution = nw;
   return a;

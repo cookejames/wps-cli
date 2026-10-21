@@ -37,6 +37,7 @@ export interface SourceAccount {
   accountName?: string | null;
   providerAccountName?: string | null;
   productName?: string | null;
+  closed?: string | boolean | null;
   parties?: unknown;
   bankName?: string | null;
   type?: string | null;

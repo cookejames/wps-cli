@@ -68,6 +68,9 @@ export interface Account {
   lastUpdated: string | null;
   daysSinceUpdate: number | null;
   deleted: boolean;
+  /** Archived in the web app ("Archived on"): the source's `closed` date is in the past. */
+  archived: boolean;
+  archivedAt: string | null;
   netWorthContribution?: number;
 }
 

@@ -5,15 +5,17 @@ import type { CommandDef } from "./types.ts";
 export const accountsList: CommandDef = {
   group: "accounts",
   name: "list",
-  summary: "List accounts (--manual, --stale-days N: manual accounts not updated for N days)",
+  summary: "List accounts (--manual, --stale-days N: manual accounts not updated for N days; archived ones hidden unless --include-archived)",
   options: {
     type: { type: "string" },
     manual: { type: "boolean" },
     "stale-days": { type: "string" },
     "include-deleted": { type: "boolean" },
+    "include-archived": { type: "boolean" },
+    archived: { type: "boolean" },
   },
   needsSession: true,
-  columns: ["id", "name", "provider", "type", "manual", "balance.major", "currency", "lastUpdated", "daysSinceUpdate"],
+  columns: ["id", "name", "provider", "type", "manual", "balance.major", "currency", "lastUpdated", "daysSinceUpdate", "archived"],
   async run(ctx) {
     const a = ctx.args;
     let staleDays: number | undefined;
@@ -24,6 +26,8 @@ export const accountsList: CommandDef = {
     const now = ctx.now();
     let list = (await (await ctx.backend()).listAccounts()).map((r) => mapAccount(r, now));
     if (!a["include-deleted"]) list = list.filter((x) => !x.deleted);
+    if (a.archived) list = list.filter((x) => x.archived);
+    else if (!a["include-archived"]) list = list.filter((x) => !x.archived);
     if (typeof a.type === "string") list = list.filter((x) => x.type === a.type);
     if (a.manual) list = list.filter((x) => x.manual);
     if (staleDays !== undefined) list = filterStale(list, staleDays);

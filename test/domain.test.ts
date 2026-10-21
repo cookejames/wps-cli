@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { addDays, isDateString, toLondonDate } from "../src/domain/dates.ts";
 import { buildCategoryIndex, normaliseCategoryId, resolveCategoryRef, titleCase } from "../src/domain/categories.ts";
 import { mapTransaction, toMinor } from "../src/domain/transactions.ts";
-import { accountDisplayName, filterStale, mapAccount, sortByStaleness } from "../src/domain/accounts.ts";
+import { accountDisplayName, archiveOf, filterStale, mapAccount, sortByStaleness } from "../src/domain/accounts.ts";
 import { mergeByUid } from "../src/domain/merge.ts";
 import { extractCategories } from "../src/domain/extract.ts";
 import { parsePublicCategories } from "../src/backends/public-categories.ts";
@@ -270,4 +270,13 @@ test("accountDisplayName: holder names are replaced by the product name, else ba
   );
   assert.equal(accountDisplayName({ uid: "a", accountName: "A Smith", parties: [{ name: "a smith" }], bankName: "Example Bank", type: "cash" }), "Example Bank current account");
   assert.equal(accountDisplayName({ uid: "a", accountName: "Dream fund", productName: "Ignored" }), "Dream fund");
+});
+
+test("archiveOf: closed in the past = archived; future or missing = not", () => {
+  const now = new Date("2026-10-21T12:00:00Z");
+  assert.deepEqual(archiveOf("2024-03-30T10:05:50.931Z", now), { archived: true, archivedAt: "2024-03-30T10:05:50.931Z" });
+  assert.deepEqual(archiveOf("2027-01-01T00:00:00Z", now), { archived: false, archivedAt: "2027-01-01T00:00:00Z" });
+  assert.deepEqual(archiveOf(undefined, now), { archived: false, archivedAt: null });
+  assert.deepEqual(archiveOf(null, now), { archived: false, archivedAt: null });
+  assert.equal(mapAccount({ uid: "a", closed: "2024-01-01T00:00:00Z" }, now).archived, true);
 });

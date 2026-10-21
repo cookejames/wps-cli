@@ -34,7 +34,7 @@ Responses are `{"data":{"result":[...],"meta":{}}}` unless noted.
    currentBalance `{amount (major), date: YYYY-MM-DD, type?}`,
    balances `[{date, amount (major), type?, tag?}]` oldest to newest,
    providerLastUpdated (ISO; absent on manual accounts), lastTransactionDate,
-   netWorthContribution, AER. Sensitive and **not output by default**: parties,
+   netWorthContribution, AER, closed (ISO datetime, or absent: the account was archived in the web app on that date; `closedReason` may accompany it). Sensitive and **not output by default**: parties,
    sortCodeAccountNumber, iban, providerAccountIdentifications.
 5. `POST API/graphql` body `{query, variables}`; response `{"data":{...}}`, an `errors`
    array is a failure.
