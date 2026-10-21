@@ -102,11 +102,39 @@ Each `src/commands/*.ts` exports
 To add a command: create one file in `src/commands/` and register it in
 `src/commands/index.ts`. Help text is generated.
 
+## Principle: same data as the dashboard
+
+The wps CLI should always attempt to provide the same data as the web app's dashboard. Account values must match
+what the web app shows, and the CLI must reproduce the dashboard's net worth figure. Rules (implemented in
+`src/domain/accounts.ts`):
+
+- *Balance for a date*, from the account's `balances` array (not `currentBalance`): sort by date (`date.slice(0,10)`; an
+  `initial`-tagged entry first on equal dates); before the first date there is none; on or after the last date it is the
+  last entry; otherwise the latest entry dated on or before the date (the last of several on that date). With no dated
+  entries it is the last entry; with an empty array, none. CLI fallback: if `balances` is missing or empty,
+  `currentBalance` is used so that no data is lost.
+- *Current value*: archived (`closed` in the past) is 0. Types `properties` and `asset`: the balance for today times
+  `(1 + yearlyAppreciation/100)^p`, with `p = floor(days / (365/12)) / 12` and `days` the whole calendar days (config
+  timezone) from the balance date to today (never negative). Any other type: the balance for today.
+- *Net worth contribution*: 0 for non-GBP (a missing currency counts as GBP), `netWorthEnabled === false` or
+  `netWorthContribution === 0`; otherwise the value (0 if none) times `netWorthContribution/100` (null means 100%).
+- *Net worth*: the sum of the contributions of active accounts (`deleted !== true` and `deletedConnection !== true`),
+  summed unrounded and rounded once to pence. Archived accounts are active but contribute 0.
+
+`Account.balance`/`balanceDate` are the last recorded balance; `Account.value` is the dashboard value.
+
 ## Commands (phase 1)
 
 - `session check`
 - `transactions list --from --to [--account] [--project] [--category] [--text] [--include-deleted] [--raw] [--limit]`
 - `accounts list [--type] [--manual] [--stale-days N] [--include-deleted] [--include-archived | --archived]`. Archived accounts (the web app's "Archived on", i.e. the source `closed` date is in the past) are hidden by default; `--archived` lists only those. With `--stale-days`, account types in config `staleIgnoreTypes` (default `["properties"]`) are left out unless `--include-all-types`.
+  Table columns: id, name, provider, type, manual, value.major, balanceDate, daysSinceUpdate, archived. JSON adds
+  `value`, `netWorthValue`, `netWorthEnabled`, `netWorthContribution` (default 100), `yearlyAppreciation`, `active`.
+- `networth [--by type|account] [--date YYYY-MM-DD]`. The dashboard's net worth (rules above); `--date` evaluates them
+  as of that date. `data: {total: Money, asOf, accounts: [{id, name, type, value, netWorthValue, included, reason?}],
+  byType: {type: total}}`, accounts sorted by `netWorthValue` descending. `reason` (when not included) is one of
+  `deleted`, `archived`, `nonGBP`, `netWorthDisabled`, `zeroContribution`, `noBalance`. `byType` and `total` cover active
+  accounts only. Table format: one line per account (or per type with `--by type`) and a TOTAL line.
 - `categories list [--custom-only]`
 - `projects list`
 - `dev extract-categories (--bundle-url <url>... | --bundle-file <path>...) [--out <path>]` (no session)
@@ -146,10 +174,12 @@ become a formula. Numbers and booleans are JSON numbers/booleans. Dates are Shee
 - `ref_categories`: categoryId, internalId, key, name, groupId, groupKey, groupName, custom.
 - `ref_projects`: id, name, type.
 - `raw_accounts`: id, name, provider, type, accountType, auto, manual, balance, currency, balanceDate (date),
-  providerLastUpdated (datetime), lastUpdated (date), daysSinceUpdate, deleted, netWorthContribution, archived, archivedAt (datetime)
+  providerLastUpdated (datetime), lastUpdated (date), daysSinceUpdate, deleted, netWorthContribution, archived, archivedAt (datetime), value,
+  netWorthValue, netWorthEnabled, yearlyAppreciation, active (appended after the older columns; `balance` is the last recorded
+  balance, `value` the dashboard value)
   (no parties, sort codes, IBANs or account numbers).
 - `meta` (key | value): last_run_at, mode, window_from, window_to, transactions_total, added, updated, unchanged,
-  missing_from_source, accounts_total, categories_total, projects_total, wps_cli_version, status.
+  missing_from_source, accounts_total, categories_total, projects_total, net_worth (the net worth total), net_worth_as_of, wps_cli_version, status.
 
 **`sheets sync`.** Fetches transactions, accounts, categories and projects with the same code as the list commands.
 - `--backfill`: transactions from 2015-01-01 to `--to` (default today); `raw_transactions` becomes exactly the fresh

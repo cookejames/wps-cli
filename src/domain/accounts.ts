@@ -1,5 +1,6 @@
 import type { SourceAccount } from "../backends/backend.ts";
 import type { Account, Money } from "../model.ts";
+import { toLondonDate as toDateIn } from "./dates.ts";
 import { toMinor } from "./transactions.ts";
 
 const isRec = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -15,20 +16,8 @@ function amountOf(v: unknown): number | null {
 }
 
 function money(major: number, currency: string): Money {
-  return { value: toMinor(major), major, currency };
-}
-
-function latestBalance(balances: unknown): { date: string | null; amount: number | null } {
-  let best: { date: string | null; amount: number | null } = { date: null, amount: null };
-  if (!Array.isArray(balances)) return best;
-  for (const b of balances) {
-    if (!isRec(b)) continue;
-    const date = str(b.date);
-    if (!date) continue;
-    // later date wins; ties go to the later entry (list is oldest -> newest)
-    if (best.date === null || date >= best.date) best = { date, amount: amountOf(b.amount) };
-  }
-  return best;
+  const m = Math.round(major * 100) / 100;
+  return { value: toMinor(m), major: m, currency };
 }
 
 const ts = (s: string | null): number => (s ? Date.parse(s) : NaN);
@@ -68,23 +57,103 @@ export function archiveOf(closed: unknown, now: Date): { archived: boolean; arch
   return { archived: Date.parse(at) <= now.getTime(), archivedAt: at };
 }
 
-export function mapAccount(raw: SourceAccount, now: Date = new Date()): Account {
+/** A normalised entry of an account's `balances` array. */
+export interface BalanceEntry {
+  date: string | null;
+  amount: number | null;
+  tag: string | null;
+}
+
+const dayOf = (d: string): string => d.slice(0, 10);
+
+/**
+ * Balance in force on `onDate` (YYYY-MM-DD), following the web app's rules: entries sorted by date (an
+ * "initial" entry first on equal dates); before the first date there is none; on or after the last date it
+ * is the last entry; otherwise the latest entry dated on or before `onDate` (the last of several on that date).
+ * No dated entries: the last entry. Empty or missing array: undefined.
+ */
+export function balanceForDate(balances: unknown, onDate: string): BalanceEntry | undefined {
+  if (!Array.isArray(balances)) return undefined;
+  const all: BalanceEntry[] = balances
+    .filter(isRec)
+    .map((b) => ({ date: str(b.date), amount: amountOf(b.amount), tag: str(b.tag) }));
+  if (all.length === 0) return undefined;
+  const dated = all.filter((b) => b.date !== null);
+  if (dated.length === 0) return all[all.length - 1];
+  dated.sort((x, y) => {
+    const c = dayOf(x.date!).localeCompare(dayOf(y.date!));
+    if (c !== 0) return c;
+    return (x.tag === "initial" ? 0 : 1) - (y.tag === "initial" ? 0 : 1);
+  });
+  if (onDate < dayOf(dated[0]!.date!)) return undefined;
+  if (dayOf(dated[dated.length - 1]!.date!) <= onDate) return dated[dated.length - 1];
+  let found: BalanceEntry | undefined;
+  for (const b of dated) if (dayOf(b.date!) <= onDate) found = b;
+  return found;
+}
+
+const round2 = (x: number): number => Math.round(x * 100) / 100;
+const VALUED_TYPES = new Set(["properties", "asset"]);
+
+/** The balance entry for today, falling back to currentBalance only when `balances` is missing or empty (CLI fallback). */
+function currentEntry(raw: SourceAccount, today: string): BalanceEntry | undefined {
+  if (Array.isArray(raw.balances) && raw.balances.length > 0) return balanceForDate(raw.balances, today);
+  const cb = raw.currentBalance;
+  const amount = amountOf(cb);
+  if (amount === null) return undefined;
+  return { date: isRec(cb) ? str(cb.date) : null, amount, tag: null };
+}
+
+/** Whole calendar days from `from` to `to` (YYYY-MM-DD). */
+function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86_400_000);
+}
+
+/** Unrounded dashboard value of an account on the day of `now`; undefined when there is no balance. */
+export function currentValue(raw: SourceAccount, now: Date, tz = "Europe/London"): number | undefined {
+  if (archiveOf(raw.closed, now).archived) return 0;
+  const today = toDateIn(now, tz);
+  const b = currentEntry(raw, today);
+  if (!b || b.amount === null) return undefined;
+  if (!VALUED_TYPES.has(String(raw.type))) return b.amount;
+  const rate = num(raw.yearlyAppreciation) ?? 0;
+  const days = b.date ? Math.max(0, daysBetween(dayOf(b.date), today)) : 0;
+  const p = Math.floor(days / (365 / 12)) / 12;
+  return b.amount * Math.pow(1 + rate / 100, p);
+}
+
+/** Unrounded contribution to net worth (GBP accounts only; the contribution is a percentage). */
+export function netWorthValue(raw: SourceAccount, now: Date, tz = "Europe/London"): number {
+  if ((str(raw.currency) ?? "GBP") !== "GBP") return 0;
+  if (raw.netWorthEnabled === false) return 0;
+  const nw = num(raw.netWorthContribution);
+  if (nw === 0) return 0;
+  const v = currentValue(raw, now, tz) ?? 0;
+  return nw !== null ? (v * nw) / 100 : v;
+}
+
+/** Counts towards net worth at all (not deleted, connection not deleted). */
+export const isActive = (raw: SourceAccount): boolean => raw.deleted !== true && raw.deletedConnection !== true;
+
+/** Net worth total: the sum of the contributions of active accounts, rounded to pence. */
+export function netWorthTotal(raws: SourceAccount[], now: Date, tz = "Europe/London"): number {
+  return round2(raws.filter(isActive).reduce((sum, r) => sum + netWorthValue(r, now, tz), 0));
+}
+
+export function mapAccount(raw: SourceAccount, now: Date = new Date(), tz = "Europe/London"): Account {
   const auto = raw.auto === true;
   const currency = str(raw.currency) ?? "GBP";
-  const latest = latestBalance(raw.balances);
-  const cb = raw.currentBalance;
-  const cbAmount = amountOf(cb);
-  const cbDate = isRec(cb) ? str(cb.date) : null;
-  const balanceMajor = cbAmount ?? latest.amount;
-  const balanceDate = cbDate ?? latest.date;
+  const entry = currentEntry(raw, toDateIn(now, tz));
+  const balanceMajor = entry?.amount ?? null;
+  const balanceDate = entry?.date ?? null;
   const providerLastUpdated = str(raw.providerLastUpdated);
 
   const candidates = [providerLastUpdated, balanceDate].filter((x): x is string => !!x && !Number.isNaN(ts(x)));
   const lastUpdated = candidates.length ? candidates.reduce((a, b) => (ts(b) > ts(a) ? b : a)) : null;
   const daysSinceUpdate = lastUpdated ? Math.max(0, Math.floor((now.getTime() - ts(lastUpdated)) / 86_400_000)) : null;
-  const nw = num(raw.netWorthContribution);
+  const value = currentValue(raw, now, tz);
 
-  const a: Account = {
+  return {
     id: raw.uid,
     name: accountDisplayName(raw),
     provider: str(raw.bankName),
@@ -95,14 +164,18 @@ export function mapAccount(raw: SourceAccount, now: Date = new Date()): Account 
     currency: str(raw.currency),
     balance: balanceMajor === null ? null : money(balanceMajor, currency),
     balanceDate,
+    value: value === undefined ? null : money(round2(value), currency),
     providerLastUpdated,
     lastUpdated,
     daysSinceUpdate,
     deleted: raw.deleted === true,
     ...archiveOf(raw.closed, now),
+    netWorthEnabled: raw.netWorthEnabled !== false,
+    netWorthContribution: num(raw.netWorthContribution) ?? 100,
+    netWorthValue: money(round2(netWorthValue(raw, now, tz)), currency),
+    yearlyAppreciation: num(raw.yearlyAppreciation),
+    active: isActive(raw),
   };
-  if (nw !== null) a.netWorthContribution = nw;
-  return a;
 }
 
 /** manual accounts not updated for at least `days` days; never-updated counts as stale. */

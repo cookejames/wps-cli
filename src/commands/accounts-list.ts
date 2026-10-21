@@ -16,7 +16,7 @@ export const accountsList: CommandDef = {
     "include-all-types": { type: "boolean" },
   },
   needsSession: true,
-  columns: ["id", "name", "provider", "type", "manual", "balance.major", "currency", "lastUpdated", "daysSinceUpdate", "archived"],
+  columns: ["id", "name", "provider", "type", "manual", "value.major", "balanceDate", "daysSinceUpdate", "archived"],
   async run(ctx) {
     const a = ctx.args;
     let staleDays: number | undefined;
@@ -25,7 +25,7 @@ export const accountsList: CommandDef = {
       if (!Number.isInteger(staleDays) || staleDays < 0) throw new BadArgsError("--stale-days must be a non-negative integer");
     }
     const now = ctx.now();
-    let list = (await (await ctx.backend()).listAccounts()).map((r) => mapAccount(r, now));
+    let list = (await (await ctx.backend()).listAccounts()).map((r) => mapAccount(r, now, ctx.config.timezone));
     if (!a["include-deleted"]) list = list.filter((x) => !x.deleted);
     if (a.archived) list = list.filter((x) => x.archived);
     else if (!a["include-archived"]) list = list.filter((x) => !x.archived);

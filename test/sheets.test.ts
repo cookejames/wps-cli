@@ -181,6 +181,10 @@ test("sync: backfill, then a window sync merges and keeps rows outside the windo
   assert.equal(meta.transactions_total, 6);
   assert.equal(meta.status, "ok");
   assert.equal(meta.window_from, "2015-01-01");
+  assert.equal(typeof meta.net_worth, "number");
+  assert.equal(meta.net_worth_as_of, "2026-10-21");
+  const ah = grid(dir, "raw_accounts")[0];
+  assert.deepEqual(ah.slice(-7), ["archived", "archivedAt", "value", "netWorthValue", "netWorthEnabled", "yearlyAppreciation", "active"]);
   // no sensitive account fields reach the sheet
   const dump = JSON.stringify(state(dir).sheets.map((s: any) => s.values));
   for (const bad of ["SENSITIVE", "iban", "sortCode", "parties"]) assert.ok(!dump.includes(bad), bad);

@@ -176,3 +176,46 @@ test("dev extract-categories needs no session and writes the file", () => {
   assert.equal(wps(["dev", "extract-categories"]).code, 5);
   assert.equal(wps(["dev", "extract-categories", "--bundle-file", "/nonexistent.js"]).code, 5);
 });
+
+test("networth: dashboard rules over the fixtures", () => {
+  const r = wps(["networth"], { env: fake });
+  assert.equal(r.code, 0, r.err);
+  assert.equal(r.json().command, "networth");
+  const d = r.json().data;
+  const house = Math.round(250000 * Math.pow(1.02, 2 / 12) * 50) / 100;
+  assert.equal(d.asOf, "2026-10-21");
+  assert.equal(d.total.major, Math.round((house + 1234.56 + 10.5) * 100) / 100);
+  assert.equal(d.total.value, Math.round(d.total.major * 100));
+  assert.deepEqual(d.accounts.map((a: any) => a.id), ["acc-manual-old", "acc-manual-new", "acc-auto", "acc-manual-never", "acc-deleted"]);
+  const by = Object.fromEntries(d.accounts.map((a: any) => [a.id, a]));
+  assert.equal(by["acc-manual-old"].included, true);
+  assert.equal(by["acc-manual-never"].reason, "noBalance");
+  assert.equal(by["acc-manual-never"].value, null);
+  assert.equal(by["acc-deleted"].reason, "deleted");
+  assert.equal(d.byType.pension, 1234.56);
+  assert.ok(!r.out.includes("SENSITIVE"));
+});
+
+test("networth --date evaluates as of that date; bad args", () => {
+  const d = wps(["networth", "--date", "2026-09-20"], { env: fake }).json().data;
+  assert.equal(d.asOf, "2026-09-20");
+  const pension = d.accounts.find((a: any) => a.id === "acc-manual-new");
+  assert.equal(pension.value.major, 1200);
+  assert.equal(d.accounts.find((a: any) => a.id === "acc-auto").reason, "noBalance");
+  assert.equal(wps(["networth", "--date", "20-09"], { env: fake }).code, 5);
+  assert.equal(wps(["networth", "--by", "x"], { env: fake }).code, 5);
+});
+
+test("networth table format: lines and a TOTAL; --by type", () => {
+  const t = wps(["networth", "--format", "table"], { env: fake });
+  assert.equal(t.code, 0, t.err);
+  assert.match(t.out, /^name\s+type\s+value\s+netWorthValue\s+included/);
+  assert.ok(t.out.includes("Example Pension"));
+  assert.ok(t.out.includes("noBalance"));
+  assert.match(t.out, /TOTAL\s.*\n$/);
+  const u = wps(["networth", "--by", "type", "--format", "table"], { env: fake });
+  assert.match(u.out, /^type\s+netWorthValue/);
+  assert.ok(u.out.includes("pension"));
+  assert.ok(wps(["networth", "--help"]).out.includes("--date"));
+  assert.ok(wps(["--help"]).out.includes("networth"));
+});

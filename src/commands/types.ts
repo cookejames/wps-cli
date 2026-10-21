@@ -33,5 +33,7 @@ export interface CommandDef {
   mutating?: boolean;
   /** columns for --format table (dotted paths allowed) */
   columns?: string[];
+  /** custom --format table rendering (instead of the generic table) */
+  renderTable?(data: unknown, args: CommandContext["args"]): string;
   run(ctx: CommandContext): Promise<CommandResult>;
 }

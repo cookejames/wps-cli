@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { loadCategoryIndex } from "../catalog.ts";
 import { BadArgsError, SinkError } from "../errors.ts";
-import { mapAccount } from "../domain/accounts.ts";
+import { mapAccount, netWorthTotal } from "../domain/accounts.ts";
 import { addDays, isDateString, toLondonDate } from "../domain/dates.ts";
 import { mergeByUid } from "../domain/merge.ts";
 import { mapTransaction } from "../domain/transactions.ts";
@@ -94,7 +94,7 @@ export const sheetsSync: CommandDef = {
     }
     rows.sort(byDateDesc);
 
-    const accountRows = rawAccounts.map((r) => accountRow(mapAccount(r, now), tz));
+    const accountRows = rawAccounts.map((r) => accountRow(mapAccount(r, now, tz), tz));
     const categoryRows = index.categories.map(categoryRow);
     const projectRows = projects.map(projectRow);
 
@@ -124,6 +124,8 @@ export const sheetsSync: CommandDef = {
       ["unchanged", stats.unchanged],
       ["missing_from_source", stats.missingFromSource],
       ["accounts_total", accountRows.length],
+      ["net_worth", netWorthTotal(rawAccounts, now, tz)],
+      ["net_worth_as_of", today],
       ["categories_total", categoryRows.length],
       ["projects_total", projectRows.length],
       ["wps_cli_version", version()],

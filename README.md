@@ -43,6 +43,14 @@ Output is one JSON document on stdout:
 `{"status":"ok","command":"...","data":...,"meta":...}`; see `docs/contract.md`
 for exit codes and the full contract, and `docs/api-notes.md` for the endpoints.
 
+## Net worth
+
+The CLI aims to provide the same data as the web app's dashboard. `wps networth [--by type|account] [--date YYYY-MM-DD]`
+reproduces the dashboard's net worth (per-account values, property appreciation, contribution percentages), and
+`accounts list` shows the same per-account `value`. The rules are in `docs/contract.md`.
+
+    my-session-helper | bin/wps networth --format table
+
 ## Google Sheets
 
 `wps sheets sync [--backfill]` copies transactions, accounts, categories and projects into `raw_*`, `ref_*` and

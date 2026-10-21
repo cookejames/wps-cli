@@ -62,8 +62,11 @@ export interface Account {
   auto: boolean;
   manual: boolean;
   currency: string | null;
+  /** The last recorded balance (rule: balance in force today), not the dashboard value. */
   balance: Money | null;
   balanceDate: string | null;
+  /** What the web app dashboard shows for the account today (property/asset values appreciate). */
+  value: Money | null;
   providerLastUpdated: string | null;
   lastUpdated: string | null;
   daysSinceUpdate: number | null;
@@ -71,7 +74,15 @@ export interface Account {
   /** Archived in the web app ("Archived on"): the source's `closed` date is in the past. */
   archived: boolean;
   archivedAt: string | null;
-  netWorthContribution?: number;
+  /** false only when the source says so */
+  netWorthEnabled: boolean;
+  /** percentage of the value counted towards net worth (100 when the source has none) */
+  netWorthContribution: number;
+  /** what this account adds to the dashboard net worth (0 when excluded) */
+  netWorthValue: Money;
+  yearlyAppreciation: number | null;
+  /** not deleted and its connection is not deleted */
+  active: boolean;
 }
 
 /** Entry of the extracted internal numeric standard-category table. */

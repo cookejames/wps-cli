@@ -33,8 +33,8 @@ export function globalHelp(): string {
     "",
     "Commands:",
   ];
-  const w = Math.max(...commands.map((c) => `${c.group} ${c.name}`.length));
-  for (const c of commands) lines.push(`  ${`${c.group} ${c.name}`.padEnd(w)}  ${c.summary}${c.needsSession ? "" : " (no session)"}`);
+  const w = Math.max(...commands.map((c) => `${c.group} ${c.name}`.trim().length));
+  for (const c of commands) lines.push(`  ${`${c.group} ${c.name}`.trim().padEnd(w)}  ${c.summary}${c.needsSession ? "" : " (no session)"}`);
   lines.push(
     "",
     "Global flags (after the command):",
@@ -50,7 +50,7 @@ export function globalHelp(): string {
 }
 
 export function commandHelp(c: CommandDef): string {
-  const lines = [`wps ${c.group} ${c.name} - ${c.summary}`, "", "Flags:"];
+  const lines = [`wps ${c.group} ${c.name}`.replace(/ $/, "") + ` - ${c.summary}`, "", "Flags:"];
   for (const [n, o] of Object.entries(c.options)) lines.push(optionLine(n, o));
   if (c.mutating) lines.push("  --yes                  actually send (default is a dry run)");
   lines.push("  --config <path>", "  --format json|table", "  --help");
@@ -76,14 +76,16 @@ export async function runCli(
   stderrWrite: (s: string) => void = (s) => process.stderr.write(s),
 ): Promise<Outcome> {
   const wantsFormat = argv.find((a, i) => a === "--format" && argv[i + 1] === "table") ? "table" : "json";
+  // a command with an empty name is a top-level one (`wps networth`)
+  if (argv[0] && findCommand(argv[0], "") && (!argv[1] || argv[1].startsWith("-"))) argv = [argv[0], "", ...argv.slice(1)];
   const [group, name] = argv;
   if (!group || group === "--help" || group === "-h" || group === "help") return { stdout: globalHelp(), code: 0 };
   if (group.startsWith("-")) return fail("", "bad_args", "expected: wps <group> <command> [flags]", wantsFormat);
-  if (!name || name === "--help" || name === "-h") {
+  if ((!name && name !== "") || name === "--help" || name === "-h") {
     if (!commands.some((c) => c.group === group)) return fail(group, "bad_args", `unknown group '${group}'`, wantsFormat);
     return name ? { stdout: groupHelp(group), code: 0 } : fail(group, "bad_args", `missing command; see 'wps ${group} --help'`, wantsFormat);
   }
-  const label = `${group} ${name}`;
+  const label = `${group} ${name}`.trim();
   const cmd = findCommand(group, name);
   if (!cmd) return fail(label, "bad_args", `unknown command '${label}'; see 'wps --help'`, wantsFormat);
 
@@ -132,7 +134,7 @@ export async function runCli(
     const meta = result.meta ?? {};
     const stdout =
       format === "table"
-        ? renderTable(result.data, cmd.columns)
+        ? (cmd.renderTable ? cmd.renderTable(result.data, values) : renderTable(result.data, cmd.columns))
         : JSON.stringify({ status: "ok", command: label, data: result.data, meta }) + "\n";
     return { stdout: redactOut(stdout), code: 0 };
   } catch (e) {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { addDays, isDateString, toLondonDate } from "../src/domain/dates.ts";
 import { buildCategoryIndex, normaliseCategoryId, resolveCategoryRef, titleCase } from "../src/domain/categories.ts";
 import { mapTransaction, toMinor } from "../src/domain/transactions.ts";
-import { accountDisplayName, archiveOf, filterStale, mapAccount, sortByStaleness } from "../src/domain/accounts.ts";
+import { accountDisplayName, archiveOf, balanceForDate, currentValue, netWorthTotal, netWorthValue, filterStale, mapAccount, sortByStaleness } from "../src/domain/accounts.ts";
 import { mergeByUid } from "../src/domain/merge.ts";
 import { extractCategories } from "../src/domain/extract.ts";
 import { parsePublicCategories } from "../src/backends/public-categories.ts";
@@ -161,7 +161,13 @@ test("mapAccount: manual account uses the balance date", () => {
   assert.equal(a.providerLastUpdated, null);
   assert.equal(a.lastUpdated, "2026-08-01");
   assert.equal(a.daysSinceUpdate, 81);
-  assert.equal(a.netWorthContribution, 250000);
+  assert.equal(a.netWorthContribution, 50);
+  assert.equal(a.yearlyAppreciation, 2);
+  // 81 days = 2 whole months of appreciation at 2%/year; 50% counts towards net worth
+  assert.equal(a.value!.major, Math.round(250000 * Math.pow(1.02, 2 / 12) * 100) / 100);
+  assert.equal(a.netWorthValue.major, Math.round(250000 * Math.pow(1.02, 2 / 12) * 50) / 100);
+  assert.equal(a.netWorthEnabled, true);
+  assert.equal(a.active, true);
   const json = JSON.stringify(a);
   assert.ok(!json.includes("SENSITIVE"));
   assert.ok(!("parties" in a));
@@ -184,8 +190,12 @@ test("mapAccount: tolerant of missing and odd fields", () => {
   assert.equal(a.daysSinceUpdate, null);
   assert.equal(a.name, "");
   assert.equal(a.manual, true);
+  // balances win over currentBalance (the web app's rule)
   const b = mapAccount({ uid: "y", currentBalance: 12.34, balances: [null, { date: "2026-10-01", amount: { value: 5 } }, { amount: 1 }] }, NOW);
-  assert.equal(b.balance!.major, 12.34);
+  assert.equal(b.balance!.major, 5);
+  // currentBalance is only a fallback when balances is missing or empty
+  assert.equal(mapAccount({ uid: "y2", currentBalance: 12.34 }, NOW).balance!.major, 12.34);
+  assert.equal(mapAccount({ uid: "y3", currentBalance: { amount: 7, date: "2026-10-02" }, balances: [] }, NOW).balanceDate, "2026-10-02");
   assert.equal(b.balanceDate, "2026-10-01");
   // falls back to the newest balances entry when currentBalance is absent
   const c = mapAccount({ uid: "z", balances: [{ date: "2026-09-01", amount: 1 }, { date: "2026-10-10", amount: 2 }] }, NOW);
@@ -279,4 +289,66 @@ test("archiveOf: closed in the past = archived; future or missing = not", () => 
   assert.deepEqual(archiveOf(undefined, now), { archived: false, archivedAt: null });
   assert.deepEqual(archiveOf(null, now), { archived: false, archivedAt: null });
   assert.equal(mapAccount({ uid: "a", closed: "2024-01-01T00:00:00Z" }, now).archived, true);
+});
+
+test("balanceForDate: sorting, initial tie-break, before/between/after, undated", () => {
+  const bs = [
+    { date: "2026-03-01T10:00:00Z", amount: 3 },
+    { date: "2026-01-01", amount: 1 },
+    { date: "2026-02-01", amount: 20 },
+    { date: "2026-02-01", amount: 10, tag: "initial" },
+  ];
+  assert.equal(balanceForDate(bs, "2025-12-31"), undefined);
+  assert.equal(balanceForDate(bs, "2026-01-01")!.amount, 1);
+  // tie: the initial entry sorts first, so the other one on that date wins
+  assert.equal(balanceForDate(bs, "2026-02-15")!.amount, 20);
+  assert.equal(balanceForDate(bs, "2026-03-01")!.amount, 3);
+  assert.equal(balanceForDate(bs, "2030-01-01")!.amount, 3);
+  assert.equal(balanceForDate([{ amount: 1 }, { amount: 2 }], "2026-01-01")!.amount, 2);
+  assert.equal(balanceForDate([], "2026-01-01"), undefined);
+  assert.equal(balanceForDate(undefined, "2026-01-01"), undefined);
+  // initial tie, where that entry is listed last in the source
+  assert.equal(balanceForDate([{ date: "2026-02-01", amount: 2 }, { date: "2026-02-01", amount: 1, tag: "initial" }], "2026-02-01")!.amount, 2);
+});
+
+test("currentValue: property appreciation, archived, asset, other types", () => {
+  const now = new Date("2026-10-21T12:00:00Z");
+  const prop = { uid: "p", type: "properties", yearlyAppreciation: 2, balances: [{ date: "2026-04-06", amount: 845000 }] };
+  // 198 days -> floor(198 / 30.4167) = 6 months
+  assert.equal(currentValue(prop, now), 845000 * Math.pow(1.02, 0.5));
+  assert.equal(currentValue({ ...prop, balances: [{ date: "2026-09-22", amount: 845000 }] }, now), 845000); // 29 days
+  assert.equal(currentValue({ ...prop, type: "asset" }, now), 845000 * Math.pow(1.02, 0.5));
+  assert.equal(currentValue({ ...prop, yearlyAppreciation: undefined }, now), 845000);
+  assert.equal(currentValue({ ...prop, closed: "2026-01-01T00:00:00Z" }, now), 0);
+  assert.equal(currentValue({ ...prop, balances: [] }, now), undefined);
+  // other types use balances, not currentBalance, and do not appreciate
+  const cash = { uid: "c", type: "cash", yearlyAppreciation: 5, currentBalance: { amount: 999, date: "2026-10-20" }, balances: [{ date: "2026-01-01", amount: 5 }, { date: "2026-10-01", amount: 7 }] };
+  assert.equal(currentValue(cash, now), 7);
+  assert.equal(currentValue({ ...cash, balances: undefined }, now), 999); // CLI fallback
+});
+
+test("netWorthValue: currency, disabled, contribution percentages", () => {
+  const now = new Date("2026-10-21T12:00:00Z");
+  const base = { uid: "a", type: "cash", balances: [{ date: "2026-10-01", amount: 1000 }] };
+  assert.equal(netWorthValue(base, now), 1000);
+  assert.equal(netWorthValue({ ...base, netWorthContribution: null }, now), 1000);
+  assert.equal(netWorthValue({ ...base, netWorthContribution: 50 }, now), 500);
+  assert.equal(netWorthValue({ ...base, netWorthContribution: 0 }, now), 0);
+  assert.equal(netWorthValue({ ...base, netWorthEnabled: false }, now), 0);
+  assert.equal(netWorthValue({ ...base, currency: "USD" }, now), 0);
+  assert.equal(netWorthValue({ ...base, balances: [] }, now), 0);
+});
+
+test("netWorthTotal: deleted excluded, archived 0, disabled 0", () => {
+  const now = new Date("2026-10-21T12:00:00Z");
+  const bal = (amount: number) => [{ date: "2026-10-01", amount }];
+  const raws = [
+    { uid: "1", type: "cash", balances: bal(100.1) },
+    { uid: "2", type: "savings", balances: bal(200.2), netWorthContribution: 50 },
+    { uid: "3", type: "cash", balances: bal(5000), deleted: true },
+    { uid: "4", type: "cash", balances: bal(5000), deletedConnection: true },
+    { uid: "5", type: "cash", balances: bal(5000), closed: "2026-01-01T00:00:00Z" },
+    { uid: "6", type: "cash", balances: bal(5000), netWorthEnabled: false },
+  ];
+  assert.equal(netWorthTotal(raws, now), 200.2);
 });

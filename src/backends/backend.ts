@@ -47,6 +47,9 @@ export interface SourceAccount {
   balances?: unknown;
   providerLastUpdated?: string | null;
   netWorthContribution?: unknown;
+  netWorthEnabled?: boolean | null;
+  yearlyAppreciation?: number | null;
+  deletedConnection?: boolean | null;
   [k: string]: unknown;
 }
 

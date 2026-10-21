@@ -31,6 +31,7 @@ export const ACCOUNTS: TableDef = {
     c("balance", "amount"), c("currency"), c("balanceDate", "date"), c("providerLastUpdated", "datetime"), c("lastUpdated", "date"),
     c("daysSinceUpdate", "number"), c("deleted", "boolean"), c("netWorthContribution", "number"),
     c("archived", "boolean"), c("archivedAt", "datetime"),
+    c("value", "amount"), c("netWorthValue", "amount"), c("netWorthEnabled", "boolean"), c("yearlyAppreciation", "number"), c("active", "boolean"),
   ],
 };
 export const META: TableDef = { sheet: "meta", cols: [c("key"), c("value", "any")] };
@@ -81,8 +82,10 @@ export const accountRow = (a: Account, tz: string): Row => ({
   id: a.id, name: orNull(a.name), provider: a.provider, type: a.type, accountType: a.accountType, auto: a.auto, manual: a.manual,
   balance: a.balance ? a.balance.major : null, currency: a.currency, balanceDate: dateOnly(a.balanceDate),
   providerLastUpdated: iso(a.providerLastUpdated, tz), lastUpdated: dateOnly(a.lastUpdated), daysSinceUpdate: a.daysSinceUpdate,
-  deleted: a.deleted, netWorthContribution: a.netWorthContribution ?? null,
+  deleted: a.deleted, netWorthContribution: a.netWorthContribution,
   archived: a.archived, archivedAt: iso(a.archivedAt, tz),
+  value: a.value ? a.value.major : null, netWorthValue: a.netWorthValue.major, netWorthEnabled: a.netWorthEnabled,
+  yearlyAppreciation: a.yearlyAppreciation, active: a.active,
 });
 
 /** Typed row -> cell. Dates and datetimes become serial numbers; everything else is sent as-is (RAW). */
