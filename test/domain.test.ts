@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { addDays, isDateString, toLondonDate } from "../src/domain/dates.ts";
 import { buildCategoryIndex, normaliseCategoryId, resolveCategoryRef, titleCase } from "../src/domain/categories.ts";
 import { mapTransaction, toMinor } from "../src/domain/transactions.ts";
-import { filterStale, mapAccount, sortByStaleness } from "../src/domain/accounts.ts";
+import { accountDisplayName, filterStale, mapAccount, sortByStaleness } from "../src/domain/accounts.ts";
 import { mergeByUid } from "../src/domain/merge.ts";
 import { extractCategories } from "../src/domain/extract.ts";
 import { parsePublicCategories } from "../src/backends/public-categories.ts";
@@ -259,4 +259,15 @@ test("categories without a display name fall back to a title-cased key", () => {
   assert.equal(idx.byInternal.get("120")!.name, "Dividends");
   assert.equal(idx.byInternal.get("12")!.name, "Home upkeep"); // a real name still wins
   assert.equal(titleCase("homeMaintenance"), "Home Maintenance");
+});
+
+test("accountDisplayName: holder names are replaced by the product name, else bank + type", () => {
+  assert.equal(accountDisplayName({ uid: "a", accountName: "Everyday Saver" }), "Everyday Saver");
+  assert.equal(accountDisplayName({ uid: "a", accountName: "MR A SMITH", productName: "Rewards Card" }), "Rewards Card");
+  assert.equal(
+    accountDisplayName({ uid: "a", accountName: "DR B SMITH & MR A SMITH", bankName: "Example Bank (sort code 00)", type: "savings" }),
+    "Example Bank savings",
+  );
+  assert.equal(accountDisplayName({ uid: "a", accountName: "A Smith", parties: [{ name: "a smith" }], bankName: "Example Bank", type: "cash" }), "Example Bank current account");
+  assert.equal(accountDisplayName({ uid: "a", accountName: "Dream fund", productName: "Ignored" }), "Dream fund");
 });

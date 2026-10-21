@@ -33,6 +33,33 @@ function latestBalance(balances: unknown): { date: string | null; amount: number
 
 const ts = (s: string | null): number => (s ? Date.parse(s) : NaN);
 
+const HOLDER = /^(mr|mrs|ms|miss|mx|dr|prof|sir|lady|rev)\.?\s/i;
+const TYPE_LABEL: Record<string, string> = { cash: "current account", savings: "savings", card: "card" };
+
+/** True when an account name is really the holder's name (e.g. "MR A SMITH", "DR A & MR B SMITH"). */
+export function isHolderName(name: string, parties: unknown): boolean {
+  if (HOLDER.test(name)) return true;
+  if (!Array.isArray(parties)) return false;
+  const n = name.trim().toLowerCase();
+  return parties.some((p) => isRec(p) && typeof p.name === "string" && p.name.trim().toLowerCase() === n);
+}
+
+/**
+ * Display name for an account. Providers sometimes put the holder's name in accountName;
+ * then use the product name, else "<bank> <type>" (e.g. "Virgin Money savings").
+ */
+export function accountDisplayName(raw: SourceAccount): string {
+  const name = str(raw.accountName) ?? str(raw.providerAccountName);
+  if (name && !isHolderName(name, raw.parties)) return name;
+  const product = str(raw.productName);
+  if (product) return product;
+  const bank = str(raw.bankName)?.replace(/\s*\(.*\)\s*$/, "") ?? null;
+  const type = str(raw.type);
+  const label = type ? TYPE_LABEL[type] ?? type : null;
+  const fallback = [bank, label].filter(Boolean).join(" ");
+  return fallback || name || "";
+}
+
 export function mapAccount(raw: SourceAccount, now: Date = new Date()): Account {
   const auto = raw.auto === true;
   const currency = str(raw.currency) ?? "GBP";
@@ -51,7 +78,7 @@ export function mapAccount(raw: SourceAccount, now: Date = new Date()): Account 
 
   const a: Account = {
     id: raw.uid,
-    name: str(raw.accountName) ?? str(raw.providerAccountName) ?? "",
+    name: accountDisplayName(raw),
     provider: str(raw.bankName),
     type: str(raw.type),
     accountType: str(raw.accountType),

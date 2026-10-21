@@ -36,6 +36,8 @@ export interface SourceAccount {
   auto?: boolean;
   accountName?: string | null;
   providerAccountName?: string | null;
+  productName?: string | null;
+  parties?: unknown;
   bankName?: string | null;
   type?: string | null;
   accountType?: string | null;
