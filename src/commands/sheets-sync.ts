@@ -2,12 +2,13 @@ import { readFileSync } from "node:fs";
 import { loadCategoryIndex } from "../catalog.ts";
 import { BadArgsError, SinkError } from "../errors.ts";
 import { mapAccount, netWorthTotal } from "../domain/accounts.ts";
+import { flattenBalances, networthSeries } from "../domain/history.ts";
 import { addDays, isDateString, toLondonDate } from "../domain/dates.ts";
 import { mergeByUid } from "../domain/merge.ts";
 import { mapTransaction } from "../domain/transactions.ts";
 import { canonicalIso } from "../sinks/serial.ts";
 import {
-  ACCOUNTS, accountRow, CATEGORIES, categoryRow, decodeRows, META, PROJECTS, projectRow, TRANSACTIONS, transactionRow, type Row,
+  ACCOUNTS, accountRow, balanceRow, CATEGORIES, categoryRow, decodeRows, META, networthRow, PROJECTS, projectRow, RAW_BALANCES, RAW_NETWORTH, RAW_SNAPSHOTS, snapshotRow, TRANSACTIONS, transactionRow, type Row,
 } from "../sinks/tables.ts";
 import { makeSink } from "./sheets-init-dashboard.ts";
 import type { CommandDef } from "./types.ts";
@@ -29,7 +30,7 @@ export const byDateDesc = (a: Row, b: Row): number =>
 export const sheetsSync: CommandDef = {
   group: "sheets",
   name: "sync",
-  summary: "Sync transactions, accounts, categories and projects into raw_*/ref_*/meta sheets",
+  summary: "Sync transactions, accounts, balance history, net worth series, snapshots, categories and projects into raw_*/ref_*/meta sheets",
   options: {
     backfill: { type: "boolean" },
     from: { type: "string" },
@@ -98,6 +99,12 @@ export const sheetsSync: CommandDef = {
     const categoryRows = index.categories.map(categoryRow);
     const projectRows = projects.map(projectRow);
 
+    // Values over time: the history is rebuilt from the API every run; snapshots are append-only.
+    const balanceRows = flattenBalances(rawAccounts, now).map(balanceRow);
+    const series = networthSeries(rawAccounts, { to: today, now, tz });
+    const networthRows = series.map(networthRow);
+    const snapshotRows = rawAccounts.map((r) => snapshotRow(mapAccount(r, now, tz), today, syncedAt, tz));
+
     const result = {
       mode: backfill ? "backfill" : "window",
       window: { from, to },
@@ -105,6 +112,9 @@ export const sheetsSync: CommandDef = {
       accounts: accountRows.length,
       categories: categoryRows.length,
       projects: projectRows.length,
+      balances: balanceRows.length,
+      networth: { days: networthRows.length, from: series[0]?.date ?? null, to: today },
+      snapshots: { date: today, rows: snapshotRows.length },
       ...(dryRun ? { dryRun: true } : {}),
     };
     if (dryRun) return { data: result };
@@ -113,6 +123,10 @@ export const sheetsSync: CommandDef = {
     await sink.rewriteTable(CATEGORIES, categoryRows);
     await sink.rewriteTable(PROJECTS, projectRows);
     await sink.rewriteTable(ACCOUNTS, accountRows);
+    await sink.rewriteTable(RAW_BALANCES, balanceRows);
+    await sink.rewriteTable(RAW_NETWORTH, networthRows);
+    // earlier days are never rewritten; a re-run on the same day replaces only today's rows
+    const snap = await sink.appendTable(RAW_SNAPSHOTS, snapshotRows, { key: "snapshot_date", value: today });
     const meta: [string, string | number][] = [
       ["last_run_at", syncedAt],
       ["mode", result.mode],
@@ -126,6 +140,10 @@ export const sheetsSync: CommandDef = {
       ["accounts_total", accountRows.length],
       ["net_worth", netWorthTotal(rawAccounts, now, tz)],
       ["net_worth_as_of", today],
+      ["balances_total", balanceRows.length],
+      ["networth_days", networthRows.length],
+      ["networth_from", series[0]?.date ?? ""],
+      ["snapshots_appended", snap.appended],
       ["categories_total", categoryRows.length],
       ["projects_total", projectRows.length],
       ["wps_cli_version", version()],

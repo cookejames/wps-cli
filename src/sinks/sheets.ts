@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { SinkError } from "../errors.ts";
 import type { Logger } from "../log.ts";
 import { redact } from "../session.ts";
-import { colIndex, encodeRows, NUMBER_FORMATS, type Row, type TableDef } from "./tables.ts";
+import { colIndex, colLetter, decodeCell, decodeRows, encodeRows, NUMBER_FORMATS, type Row, type TableDef } from "./tables.ts";
 
 /** Linux caps a single argv string at ~128 KB; stay well under it. */
 export const MAX_JSON_BYTES = 100_000;
@@ -196,6 +196,87 @@ export class SheetsSink {
     return new Map(sheets.map((s) => [s.title, s]));
   }
 
+  /** Number formats for the data columns and a bold header row. */
+  private formatRequests(def: TableDef, sheetId: number): unknown[] {
+    const requests: unknown[] = [];
+    def.cols.forEach((col, i) => {
+      const f = NUMBER_FORMATS[col.type];
+      if (!f) return;
+      requests.push({
+        repeatCell: {
+          range: { sheetId, startRowIndex: 1, startColumnIndex: i, endColumnIndex: i + 1 },
+          cell: { userEnteredFormat: { numberFormat: f } },
+          fields: "userEnteredFormat.numberFormat",
+        },
+      });
+    });
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: def.cols.length },
+        cell: { userEnteredFormat: { textFormat: { bold: true } } },
+        fields: "userEnteredFormat.textFormat.bold",
+      },
+    });
+    return requests;
+  }
+
+  /**
+   * Append-only table: make sure the sheet exists with the header row (created if missing, never altered if
+   * present), then add `rows` after the existing ones. Rows already there are not rewritten. With `replace`,
+   * existing rows whose `key` column equals `value` (a re-run on the same day) are dropped first: when they are
+   * the trailing rows only they are cleared; otherwise the whole table is rewritten for this run.
+   */
+  async appendTable(def: TableDef, rows: readonly Row[], replace?: { key: string; value: string }): Promise<{ appended: number; replaced: number; rewrote: boolean }> {
+    const header = def.cols.map((c) => c.key);
+    const sheets = await this.listSheets();
+    let grid: unknown[][] = [];
+    const have = sheets.find((s) => s.title === def.sheet);
+    if (have) grid = await this.readValues(def.sheet);
+    if (grid.length > 0 && JSON.stringify(grid[0]!.map(String)) !== JSON.stringify(header)) {
+      throw new SinkError(`${def.sheet} has an unexpected header row; not touching it`);
+    }
+    if (grid.length === 0) {
+      const info = await this.ensureSheets([{ title: def.sheet, rows: Math.max(rows.length + 1, 2), cols: header.length }]);
+      const target = info.get(def.sheet)!;
+      await this.writeValues(`${quoteSheet(def.sheet)}!A1`, [header], "RAW");
+      await this.batchUpdate([
+        { updateSheetProperties: { properties: { sheetId: target.sheetId, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
+        ...this.formatRequests(def, target.sheetId),
+      ]);
+      grid = [header];
+    }
+
+    let replaced = 0;
+    if (replace) {
+      const col = def.cols.find((c) => c.key === replace.key)!;
+      const at = header.indexOf(replace.key);
+      const hits: number[] = [];
+      grid.forEach((line, i) => {
+        if (i > 0 && decodeCell(col, line[at], this.tz) === replace.value) hits.push(i);
+      });
+      replaced = hits.length;
+      if (hits.length > 0) {
+        const first = hits[0]!;
+        const suffix = hits.length === grid.length - first && hits.every((h, k) => h === first + k);
+        if (!suffix) {
+          const kept = grid.filter((_, i) => i > 0 && !hits.includes(i));
+          const decoded = decodeRows(def, [grid[0]!, ...kept], this.tz);
+          await this.rewriteTable(def, [...decoded, ...rows]);
+          return { appended: rows.length, replaced, rewrote: true };
+        }
+        await this.clearValues(`${quoteSheet(def.sheet)}!A${first + 1}:${colLetter(header.length - 1)}`);
+      }
+    }
+    const body = encodeRows(def, rows, this.tz).slice(1);
+    let calls = 0;
+    for (const chunk of this.chunkRows(body)) {
+      await this.call(["values", "append"], { range: `${quoteSheet(def.sheet)}!A1`, valueInputOption: "RAW", insertDataOption: "INSERT_ROWS" }, { values: chunk });
+      calls++;
+    }
+    this.log?.info(`${def.sheet}: appended ${rows.length} rows in ${calls} chunk(s)`);
+    return { appended: rows.length, replaced, rewrote: false };
+  }
+
   /**
    * Replace a sheet's contents without ever showing half-written data and without deleting or renaming it:
    * write to a hidden staging sheet, then one batchUpdate copies it over the target.
@@ -243,24 +324,7 @@ export class SheetsSink {
         },
       });
     }
-    def.cols.forEach((col, i) => {
-      const f = NUMBER_FORMATS[col.type];
-      if (!f) return;
-      requests.push({
-        repeatCell: {
-          range: { sheetId: target.sheetId, startRowIndex: 1, startColumnIndex: i, endColumnIndex: i + 1 },
-          cell: { userEnteredFormat: { numberFormat: f } },
-          fields: "userEnteredFormat.numberFormat",
-        },
-      });
-    });
-    requests.push({
-      repeatCell: {
-        range: { sheetId: target.sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: nCols },
-        cell: { userEnteredFormat: { textFormat: { bold: true } } },
-        fields: "userEnteredFormat.textFormat.bold",
-      },
-    });
+    requests.push(...this.formatRequests(def, target.sheetId));
     await this.batchUpdate(requests);
 
     // 4: clean up staging (values, then shrink to free cells); it stays hidden

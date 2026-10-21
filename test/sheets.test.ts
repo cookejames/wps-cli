@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { fixtureDir, here, root } from "./helpers.ts";
 import { SheetsSink, MAX_JSON_BYTES } from "../src/sinks/sheets.ts";
 import { canonicalIso, dateToSerial, isoToSerial, serialToDate, serialToIso } from "../src/sinks/serial.ts";
-import { ACCOUNTS, CATEGORIES, PROJECTS, TRANSACTIONS, colLetter, type TableDef } from "../src/sinks/tables.ts";
+import { ACCOUNTS, CATEGORIES, PROJECTS, RAW_BALANCES, RAW_SNAPSHOTS, TRANSACTIONS, colLetter, type TableDef } from "../src/sinks/tables.ts";
 import { DEFAULT_LAYOUT, transactionsFormula } from "../src/sinks/dashboard.ts";
 import { SinkError } from "../src/errors.ts";
 
@@ -320,4 +320,93 @@ test("dashboard formula column letters come from the column lists", () => {
   assert.notEqual(L(tx, "bookingDate"), "B");
   assert.ok(g.includes("'ref_categories'!A2:C, 3, FALSE"));
   assert.notEqual(g, f);
+});
+
+test("sync: raw_balances and raw_networth are rebuilt each run; meta has the new keys", () => {
+  const dir = newDir();
+  const r = wps(["sheets", "sync", "--spreadsheet", "S", "--backfill", "--to", "2026-10-31"], dir);
+  assert.equal(r.code, 0, r.out + r.err);
+  const d = r.json().data;
+  assert.equal(d.balances, 5); // 2 + 2 + 1 entries in the fixtures
+  assert.deepEqual(d.networth, { days: 143, from: "2026-06-01", to: "2026-10-21" });
+  assert.deepEqual(d.snapshots, { date: "2026-10-21", rows: 5 });
+  assert.deepEqual(grid(dir, "raw_balances")[0], RAW_BALANCES.cols.map((c) => c.key));
+  assert.equal(grid(dir, "raw_balances").length, 6);
+  assert.equal(grid(dir, "raw_networth").length, 144);
+  assert.deepEqual(grid(dir, "raw_networth")[0].slice(0, 3), ["date", "net_worth", "cash"]);
+  const last = grid(dir, "raw_networth")[143];
+  const meta = Object.fromEntries(grid(dir, "meta").slice(1).map((x: any[]) => [x[0], x[1]]));
+  assert.equal(last[1], meta.net_worth); // today's point is the dashboard total
+  assert.equal(meta.balances_total, 5);
+  assert.equal(meta.networth_days, 143);
+  assert.equal(meta.snapshots_appended, 5);
+  assert.equal(meta.networth_from, "2026-06-01");
+  // the series is written as date serials with date/amount formats
+  assert.equal(grid(dir, "raw_networth")[1][0], dateToSerial("2026-06-01"));
+  assert.ok(sheet(dir, "raw_networth").formats.some((f: any) => f.cell.userEnteredFormat.numberFormat?.pattern === "yyyy-mm-dd"));
+});
+
+test("sync: raw_account_snapshots is append-only across days; a same-day rerun replaces only today's rows", () => {
+  const dir = newDir();
+  const backend = mkdtempSync(join(tmpdir(), "wps-backend-"));
+  cpSync(fixtureDir, backend, { recursive: true });
+  const args = ["sheets", "sync", "--spreadsheet", "S", "--backfill", "--to", "2026-10-31"];
+  const snaps = () => grid(dir, "raw_account_snapshots");
+  const day = (g: any[][], iso: string) => g.slice(1).filter((r) => r[0] === dateToSerial(iso));
+
+  // day 1: the sheet is created with its header and today's rows
+  assert.equal(wps(args, dir, {}, backend, "2026-10-21T12:00:00Z").code, 0);
+  assert.deepEqual(snaps()[0], RAW_SNAPSHOTS.cols.map((c) => c.key));
+  assert.equal(sheet(dir, "raw_account_snapshots").frozenRowCount, 1);
+  const g1 = snaps();
+  assert.equal(g1.length, 6);
+  assert.deepEqual(g1[1].slice(0, 2), [dateToSerial("2026-10-21"), "acc-manual-old"]);
+  assert.equal(typeof g1[1][12], "number"); // synced_at
+  const forDay1 = calls(dir).length;
+
+  // day 2: appended after day 1; day 1's rows are untouched
+  const accounts = JSON.parse(readFileSync(join(backend, "accounts.json"), "utf8"));
+  accounts.find((a: any) => a.uid === "acc-auto").balances.push({ date: "2026-10-22", amount: 99 });
+  writeFileSync(join(backend, "accounts.json"), JSON.stringify(accounts));
+  assert.equal(wps(args, dir, {}, backend, "2026-10-22T05:40:00Z").code, 0);
+  const g2 = snaps();
+  assert.equal(g2.length, 11);
+  assert.deepEqual(g2.slice(0, 6), g1);
+  assert.equal(day(g2, "2026-10-22").length, 5);
+  assert.equal(day(g2, "2026-10-22").find((r) => r[1] === "acc-auto")![4], 99);
+  assert.equal(day(g2, "2026-10-21").find((r) => r[1] === "acc-auto")![4], 10.5);
+  const day2Calls = calls(dir).slice(forDay1).filter((c) => JSON.stringify(c).includes("raw_account_snapshots"));
+  assert.deepEqual([...new Set(day2Calls.map((c) => c.method))].sort(), ["values append", "values get"]);
+  assert.ok(day2Calls.every((c) => c.method !== "values append" || c.body.values.length === 5 && c.body.values.every((r: any[]) => r[0] === dateToSerial("2026-10-22"))));
+
+  // same day again with a new value: only day 2's rows change; still one set per day
+  const before = calls(dir).length;
+  accounts.find((a: any) => a.uid === "acc-auto").balances.push({ date: "2026-10-22", amount: 77 });
+  writeFileSync(join(backend, "accounts.json"), JSON.stringify(accounts));
+  assert.equal(wps(args, dir, {}, backend, "2026-10-22T17:00:00Z").code, 0);
+  const g3 = snaps();
+  assert.equal(g3.length, 11);
+  assert.deepEqual(g3.slice(0, 6), g1);
+  assert.equal(day(g3, "2026-10-22").find((r) => r[1] === "acc-auto")![4], 77);
+  const rerun = calls(dir).slice(before).filter((c) => JSON.stringify(c).includes("raw_account_snapshots"));
+  assert.ok(rerun.some((c) => c.method === "values clear" && c.params.range === "'raw_account_snapshots'!A7:M"));
+  assert.ok(!rerun.some((c) => c.method === "values update"), "no rewrite of the table");
+  const meta = Object.fromEntries(grid(dir, "meta").slice(1).map((x: any[]) => [x[0], x[1]]));
+  assert.equal(meta.snapshots_appended, 5);
+});
+
+test("snapshots: today's rows not at the end fall back to a rewrite; a foreign header is never touched", async () => {
+  const dir = newDir();
+  Object.assign(process.env, env(dir));
+  const row = (d: string, id: string) => ({ snapshot_date: d, accountId: id, name: id, type: "cash", balance: 1, balanceDate: "2026-01-01", value: 1, netWorthValue: 1, netWorthEnabled: true, netWorthContribution: 100, archived: false, active: true, synced_at: "2026-10-20T05:00:00.000Z" });
+  const s = sink(dir);
+  await s.appendTable(RAW_SNAPSHOTS, [row("2026-10-21", "a"), row("2026-10-21", "b")], { key: "snapshot_date", value: "2026-10-21" });
+  await s.appendTable(RAW_SNAPSHOTS, [row("2026-10-22", "a")], { key: "snapshot_date", value: "2026-10-22" });
+  // today's (10-21) rows are now in the middle
+  const r = await s.appendTable(RAW_SNAPSHOTS, [row("2026-10-21", "c")], { key: "snapshot_date", value: "2026-10-21" });
+  assert.equal(r.rewrote, true);
+  assert.deepEqual(grid(dir, "raw_account_snapshots").slice(1).map((x: any[]) => x[1]).filter(Boolean), ["a", "c"]); // 10-22's "a" kept, 10-21 replaced by "c"
+  seed(dir, [{ title: "raw_account_snapshots", values: [["something", "else"], ["x", "y"]] }]);
+  await assert.rejects(() => s.appendTable(RAW_SNAPSHOTS, [row("2026-10-21", "a")]), SinkError);
+  assert.deepEqual(grid(dir, "raw_account_snapshots"), [["something", "else"], ["x", "y"]]);
 });

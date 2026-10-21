@@ -1,5 +1,6 @@
 // Sheet layouts (column order is the contract) and row <-> cell conversion.
 import type { Account, Category, Project, Transaction } from "../model.ts";
+import { BUCKETS, type BalanceHistoryEntry, type NetWorthPoint } from "../domain/history.ts";
 import { canonicalIso, dateToSerial, isoToSerial, serialToDate, serialToIso } from "./serial.ts";
 
 export type ColType = "string" | "number" | "amount" | "boolean" | "date" | "datetime" | "any";
@@ -32,6 +33,23 @@ export const ACCOUNTS: TableDef = {
     c("daysSinceUpdate", "number"), c("deleted", "boolean"), c("netWorthContribution", "number"),
     c("archived", "boolean"), c("archivedAt", "datetime"),
     c("value", "amount"), c("netWorthValue", "amount"), c("netWorthEnabled", "boolean"), c("yearlyAppreciation", "number"), c("active", "boolean"),
+  ],
+};
+export const RAW_BALANCES: TableDef = {
+  sheet: "raw_balances",
+  cols: [c("accountId"), c("accountName"), c("accountType"), c("date", "date"), c("amount", "amount"), c("entryType"), c("tag"), c("active", "boolean"), c("archived", "boolean")],
+};
+export const RAW_NETWORTH: TableDef = {
+  sheet: "raw_networth",
+  cols: [c("date", "date"), c("net_worth", "amount"), ...BUCKETS.map((b) => c(b, "amount"))],
+};
+/** Append-only: one row per account per sync day. */
+export const RAW_SNAPSHOTS: TableDef = {
+  sheet: "raw_account_snapshots",
+  cols: [
+    c("snapshot_date", "date"), c("accountId"), c("name"), c("type"), c("balance", "amount"), c("balanceDate", "date"), c("value", "amount"),
+    c("netWorthValue", "amount"), c("netWorthEnabled", "boolean"), c("netWorthContribution", "number"), c("archived", "boolean"),
+    c("active", "boolean"), c("synced_at", "datetime"),
   ],
 };
 export const META: TableDef = { sheet: "meta", cols: [c("key"), c("value", "any")] };
@@ -86,6 +104,18 @@ export const accountRow = (a: Account, tz: string): Row => ({
   archived: a.archived, archivedAt: iso(a.archivedAt, tz),
   value: a.value ? a.value.major : null, netWorthValue: a.netWorthValue.major, netWorthEnabled: a.netWorthEnabled,
   yearlyAppreciation: a.yearlyAppreciation, active: a.active,
+});
+
+export const balanceRow = (e: BalanceHistoryEntry): Row => ({
+  accountId: e.accountId, accountName: orNull(e.accountName), accountType: e.accountType, date: e.date, amount: e.amount,
+  entryType: e.entryType, tag: e.tag, active: e.active, archived: e.archived,
+});
+export const networthRow = (p: NetWorthPoint): Row => ({ ...p });
+/** One account on one sync day, from the mapped account (same values as raw_accounts). */
+export const snapshotRow = (a: Account, day: string, syncedAt: string, tz: string): Row => ({
+  snapshot_date: day, accountId: a.id, name: orNull(a.name), type: a.type, balance: a.balance ? a.balance.major : null, balanceDate: dateOnly(a.balanceDate),
+  value: a.value ? a.value.major : null, netWorthValue: a.netWorthValue.major, netWorthEnabled: a.netWorthEnabled,
+  netWorthContribution: a.netWorthContribution, archived: a.archived, active: a.active, synced_at: iso(syncedAt, tz),
 });
 
 /** Typed row -> cell. Dates and datetimes become serial numbers; everything else is sent as-is (RAW). */

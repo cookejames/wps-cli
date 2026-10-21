@@ -76,10 +76,22 @@ switch (method) {
     break;
   }
   case "values clear": {
-    const { sh } = parseRange(params.range);
-    sh.values = [];
+    // a start row (A5:M) clears from that row down; a bare sheet name clears everything
+    const { sh, row } = parseRange(params.range);
+    sh.values = sh.values.slice(0, row);
     save();
     out({ clearedRange: params.range });
+    break;
+  }
+  case "values append": {
+    if (params.valueInputOption !== "RAW" || params.insertDataOption !== "INSERT_ROWS") fail(400, "append needs RAW and INSERT_ROWS");
+    const { sh } = parseRange(params.range);
+    while (sh.values.length && (sh.values[sh.values.length - 1] ?? []).every((v) => v === null || v === undefined)) sh.values.pop();
+    const at = sh.values.length;
+    sh.rowCount = Math.max(sh.rowCount, at + body.values.length); // INSERT_ROWS grows the grid
+    put(sh, at, body.values);
+    save();
+    out({ updates: { updatedRows: body.values.length } });
     break;
   }
   case "batchUpdate": {
@@ -122,6 +134,10 @@ switch (method) {
         for (let i = g.startRowIndex; i < Math.min(g.endRowIndex, s.values.length); i++)
           for (let j = g.startColumnIndex; j < g.endColumnIndex; j++) if (s.values[i]) s.values[i][j] = null;
         replies.push({});
+      } else if (r.addChart) {
+        const s = byId(r.addChart.chart.position.overlayPosition.anchorCell.sheetId);
+        s.charts = [...(s.charts ?? []), r.addChart.chart];
+        replies.push({ addChart: { chart: { chartId: 5000 + s.charts.length } } });
       } else if (r.repeatCell) {
         byId(r.repeatCell.range.sheetId).formats.push(r.repeatCell);
         replies.push({});
