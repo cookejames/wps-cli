@@ -89,7 +89,7 @@ test("buildCategoryIndex merges sources", () => {
   // group key with camelCase title-cased
   assert.equal(idx.byId.get("std:00000000-0000-4000-8000-000000000003")!.groupName, "Daily Living");
   const mystery = idx.byId.get("std-numeric:99")!;
-  assert.equal(mystery.name, null);
+  assert.equal(mystery.name, "Mystery"); // no display name: title-cased key
   const cus = idx.byId.get("cus:00000000-0000-4000-8000-000000000100")!;
   assert.equal(cus.custom, true);
   assert.equal(cus.name, "Side project costs");
@@ -249,4 +249,14 @@ test("extractCategories on a synthetic bundle", () => {
   assert.equal(list.find((e) => e.uid === 5)!.externalId, "00000000-0000-4000-8000-000000000002"); // different field order
   assert.equal(list.find((e) => e.uid === 7)!.externalId, null); // quoted keys, no externalId
   assert.equal(list.find((e) => e.uid === 3), undefined);
+});
+
+test("categories without a display name fall back to a title-cased key", () => {
+  const idx = buildCategoryIndex({
+    extracted: [{ uid: 120, key: "dividends", group: 2 }, { uid: 12, key: "homeMaintenance", group: 8 }],
+    names: { categories: { homeMaintenance: "Home upkeep" }, groups: {} },
+  });
+  assert.equal(idx.byInternal.get("120")!.name, "Dividends");
+  assert.equal(idx.byInternal.get("12")!.name, "Home upkeep"); // a real name still wins
+  assert.equal(titleCase("homeMaintenance"), "Home Maintenance");
 });

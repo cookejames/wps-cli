@@ -39,7 +39,7 @@ export function buildCategoryIndex(input: IndexInput): CategoryIndex {
     const groupName = groupKey ? (names.groups[groupKey] ?? titleCase(groupKey)) : null;
     return { groupKey, groupName };
   };
-  const nameFor = (key?: string): string | null => (key ? (names.categories[key] ?? null) : null);
+  const nameFor = (key?: string): string | null => (key ? (names.categories[key] ?? titleCase(key)) : null);
 
   const categories: Category[] = [];
   const seen = new Set<string>();
