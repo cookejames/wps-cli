@@ -110,3 +110,12 @@ test("requests are serialised with a pause between them", async () => {
   assert.equal(maxActive, 1);
   assert.ok(times[1] - times[0] >= 35 && times[2] - times[1] >= 35);
 });
+
+test("setBalance: PUT with the web app's {data: {amount, date}} wrapper; 204 is success", async () => {
+  const { b, calls } = backend(() => new Response(null, { status: 204 }));
+  await b.setBalance("acc-1", { amount: 6150.5, date: "2026-10-21" });
+  assert.equal(calls[0].url, "https://asm.example-tenant.com/apiv2/accounts/acc-1/balances");
+  assert.equal(calls[0].init.method, "PUT");
+  assert.deepEqual(JSON.parse(String(calls[0].init.body)), { data: { amount: 6150.5, date: "2026-10-21" } });
+  assert.equal((calls[0].init.headers as Record<string, string>)["content-type"], "application/json");
+});

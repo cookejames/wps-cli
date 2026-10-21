@@ -49,9 +49,12 @@ export class InternalWebBackend implements Backend {
     return items as SourceAccount[];
   }
 
-  /** The web app's updateBalance: PUT /apiv2/accounts/{uid}/balances {amount, date}. */
+  /**
+   * The web app's updateBalance: PUT /apiv2/accounts/{uid}/balances. Like every web-app REST write (mhRequest), the
+   * payload is wrapped as {data: {amount, date}}; unwrapped it returns HTTP 500. Success is 204 with no body.
+   */
   async setBalance(accountId: string, entry: { amount: number; date: string }): Promise<void> {
-    await this.http.request("PUT", `/apiv2/accounts/${encodeURIComponent(accountId)}/balances`, { amount: entry.amount, date: entry.date });
+    await this.http.request("PUT", `/apiv2/accounts/${encodeURIComponent(accountId)}/balances`, { data: { amount: entry.amount, date: entry.date } });
   }
 
   async listProjects(): Promise<Project[]> {
