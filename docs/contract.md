@@ -135,12 +135,27 @@ what the web app shows, and the CLI must reproduce the dashboard's net worth fig
   byType: {type: total}}`, accounts sorted by `netWorthValue` descending. `reason` (when not included) is one of
   `deleted`, `archived`, `nonGBP`, `netWorthDisabled`, `zeroContribution`, `noBalance`. `byType` and `total` cover active
   accounts only. Table format: one line per account (or per type with `--by type`) and a TOTAL line.
+- `networth history [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--interval day|week|month] [--by type]`. Net worth per day
+  from `--from` (default: the earliest dated balance of any active account) to `--to` (default today). Each day is
+  evaluated with the rules above as of midday UTC that day (as `networth --date`; today uses the real clock), so the
+  point for today equals `networth`'s total. `week` keeps each Sunday and `month` each month end, plus the `--to` day.
+  `data: [{date, net_worth, cash, savings, card, investment, pension, properties, asset, mortgage, loan, other}]`
+  (plain numbers in pounds, ascending date; unknown types count under `other`). The buckets are the per-type sums of
+  `netWorthValue` over active accounts. `net_worth` is exactly the net worth total; the buckets are rounded with the
+  largest-remainder method so they add up to it to the penny, so a bucket can differ by 0.01 from its independent
+  rounding (the total wins). `meta: {count, from, to, interval, accounts}`. `--by type` only adds the bucket columns to
+  `--format table` (JSON always has them). Caveat: past days use the accounts' current settings (`netWorthEnabled`,
+  contribution, `yearlyAppreciation`, `closed`) and deleted accounts are left out entirely.
+- `accounts balances [--account <id>] [--from] [--to] [--include-deleted] [--include-archived]`. One entry per
+  `balances[]` item: `data: [{accountId, accountName, accountType, date, amount, entryType, tag, active, archived}]`,
+  oldest first. Deleted (inactive) and archived accounts are hidden unless asked for; `--from/--to` filter on `date`.
+  Table columns: date, accountName, accountType, amount, entryType, tag, accountId, archived.
 - `categories list [--custom-only]`
 - `projects list`
 - `dev extract-categories (--bundle-url <url>... | --bundle-file <path>...) [--out <path>]` (no session)
 
 - `sheets sync [--backfill] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--spreadsheet <id>] [--dry-run]`
-- `sheets init-dashboard [--spreadsheet <id>] [--sheet Transactions] [--force]` (no session)
+- `sheets init-dashboard [--spreadsheet <id>] [--sheet Transactions] [--force] [--only transactions|networth]` (no session)
 
 ## Google Sheets (the `gws` sink)
 
@@ -178,8 +193,14 @@ become a formula. Numbers and booleans are JSON numbers/booleans. Dates are Shee
   netWorthValue, netWorthEnabled, yearlyAppreciation, active (appended after the older columns; `balance` is the last recorded
   balance, `value` the dashboard value)
   (no parties, sort codes, IBANs or account numbers).
+- `raw_balances`: accountId, accountName, accountType, date (date), amount, entryType, tag, active, archived. One row per
+  `balances[]` entry of every account (deleted and archived ones included, flagged). Rebuilt every run.
+- `raw_networth`: date (date), net_worth, cash, savings, card, investment, pension, properties, asset, mortgage, loan,
+  other. One row per day from the first balance date to today (the `networth history` series). Rebuilt every run.
+- `raw_account_snapshots`: snapshot_date (date), accountId, name, type, balance, balanceDate (date), value, netWorthValue,
+  netWorthEnabled, netWorthContribution, archived, active, synced_at (datetime). **Append-only**, see below.
 - `meta` (key | value): last_run_at, mode, window_from, window_to, transactions_total, added, updated, unchanged,
-  missing_from_source, accounts_total, categories_total, projects_total, net_worth (the net worth total), net_worth_as_of, wps_cli_version, status.
+  missing_from_source, accounts_total, categories_total, projects_total, balances_total, networth_days, networth_from, snapshots_appended, net_worth (the net worth total), net_worth_as_of, wps_cli_version, status.
 
 **`sheets sync`.** Fetches transactions, accounts, categories and projects with the same code as the list commands.
 - `--backfill`: transactions from 2015-01-01 to `--to` (default today); `raw_transactions` becomes exactly the fresh
@@ -190,14 +211,31 @@ become a formula. Numbers and booleans are JSON numbers/booleans. Dates are Shee
   If `raw_transactions` is missing or empty this is `bad_args` ("raw_transactions is empty; run with --backfill first").
 - Rows are sorted by bookingDate descending, then id. `ref_*` and `raw_accounts` are rewritten every run; `meta` last.
 - `--dry-run` computes everything and writes nothing (it still reads the sheet in window mode).
-- Output: `data: {mode, window:{from,to}, transactions:{total,added,updated,unchanged,missingFromSource}, accounts, categories, projects}`.
+- `raw_balances` and `raw_networth` are rebuilt from the API in full on every run (both modes; the series always runs
+  from the first balance date to today, whatever the transaction window).
+- `raw_account_snapshots` is append-only (both modes). If missing it is created with its header. Each run appends
+  today's rows (one per account, same values as `raw_accounts`) with `values append` (`RAW`, `INSERT_ROWS`, chunked
+  under the argument limit); earlier days are never rewritten. A re-run on the same day first clears today's rows when
+  they are the trailing rows (a `values clear` of just that range) and appends fresh ones; if they are not at the end
+  the table is rewritten for that run. A sheet whose header row differs is refused (`sink_error`).
+- Output: `data: {mode, window:{from,to}, transactions:{total,added,updated,unchanged,missingFromSource}, accounts, categories, projects, balances, networth:{days,from,to}, snapshots:{date,rows}}`.
 
 **`sheets init-dashboard`.** Writes the `Transactions` sheet once: title and note in row 1, headers
 `Date | Category | Project | Description | Amount | Account` in row 3, and one spilling formula in A4
 (`IFERROR(SORT(FILTER({...}, id<>"", deleted<>TRUE), 1, FALSE), "")`, lookups via `ARRAYFORMULA(IFERROR(VLOOKUP(...)))`,
 column letters derived from the column lists in code). An empty default `Sheet1` is renamed; a non-empty
 `Transactions` sheet is refused (`bad_args`) unless `--force`. The grid is grown to 30,000 rows so the formula can
-spill; rows 1-3 are frozen. Output: `data: {sheet, created|renamed|reused: true}`.
+spill; rows 1-3 are frozen. Output: `data: {sheet, created|renamed|reused: true, netWorth: {...}}`.
+
+It then creates the `Net worth` sheet, once: if a sheet of that name exists it is never touched (not even with
+`--force`) and the result is `netWorth: {sheet, existed: true}`; otherwise `{sheet, created: true}`. Layout: title and
+note in row 1, headers `Month end | Net worth | Cash | ... | Other` in row 3, one spilling formula in A4 over
+`raw_networth` (`IFERROR(FILTER({date, net_worth, buckets...}, date<>"", DAY(date+1)=1 or date=MAX(date)), "")`: month-end
+rows plus the latest day), rows 1-3 frozen. Two charts sit to the right of the table, built by `addChart` over
+open-ended ranges of A3:L (header row included, `headerCount: 1`): a line chart of `Net worth` against `Month end`, and a
+stacked area chart (`stackedType: STACKED`) of the ten type columns. `--only transactions|networth` runs just one part;
+`--only networth` is how to add the sheet to a spreadsheet whose Transactions sheet already has content (the full run
+refuses that sheet without `--force`).
 
 ## Test-only: fake backend
 

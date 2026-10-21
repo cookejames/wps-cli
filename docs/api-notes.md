@@ -36,6 +36,17 @@ Responses are `{"data":{"result":[...],"meta":{}}}` unless noted.
    providerLastUpdated (ISO; absent on manual accounts), lastTransactionDate,
    netWorthContribution, AER, closed (ISO datetime, or absent: the account was archived in the web app on that date; `closedReason` may accompany it). Sensitive and **not output by default**: parties,
    sortCodeAccountNumber, iban, providerAccountIdentifications.
+   **`balances[]` history semantics.** Each item is `{date, amount, type?, tag?}`. An entry is recorded only when the
+   value changes (cash/savings go back about three years with up to ~1,200 entries; investments, pensions and
+   property start later). So the history is a step function: the balance on a day is the latest entry dated on or
+   before it (`balanceForDate`, the web app's `getBalanceForDate`), and none before the first entry. Property and
+   asset values are then grown from that entry's date as for today (see contract.md), which gives the right value
+   for any past day. The `date`s are plain days; `type` is the entry type (e.g. an initial balance) and `tag` can be
+   `initial`. Caveat: the history carries no settings, so a past day is computed with the account's *current*
+   `netWorthEnabled`, contribution %, `yearlyAppreciation` and `closed` date, and deleted accounts are missing
+   entirely; `raw_account_snapshots` records the settings as they were from the first sync onward.
+   Manual balance edits (for a future `accounts set-balance`, not implemented): `PUT /apiv2/accounts/{uid}/balances`
+   with `{amount, date[, tag]}` (the web app's `updateBalance` mutation).
 5. `POST API/graphql` body `{query, variables}`; response `{"data":{...}}`, an `errors`
    array is a failure.
 

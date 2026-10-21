@@ -51,12 +51,21 @@ reproduces the dashboard's net worth (per-account values, property appreciation,
 
     my-session-helper | bin/wps networth --format table
 
+Over time: `wps networth history [--from] [--to] [--interval day|week|month] [--by type]` gives net worth per day (or
+per week/month end) with the per-type sums, from each account's dated balance history, evaluated with the same
+rules for every day. `wps accounts balances [--account <id>] [--from] [--to]` lists that history, one row per
+recorded balance. History uses the accounts' *current* settings (see `docs/api-notes.md`).
+
 ## Google Sheets
 
 `wps sheets sync [--backfill]` copies transactions, accounts, categories and projects into `raw_*`, `ref_*` and
 `meta` sheets of a Google spreadsheet (set `spreadsheetId` in the config or pass `--spreadsheet`), using the
 [`gws`](https://github.com/googleworkspace/cli) CLI, which must be installed and logged in with the Sheets scope.
-`wps sheets init-dashboard` creates a `Transactions` sheet built on those sheets, once. The app owns the
+It also writes `raw_balances` (the balance history) and `raw_networth` (a daily net worth series by type), both
+rebuilt every run, and `raw_account_snapshots`, which only ever grows: one row per account per sync day, so the
+settings as they were each day are kept from now on.
+`wps sheets init-dashboard` creates a `Transactions` sheet and a `Net worth` sheet (month-end table and two charts)
+built on those sheets, once each; `--only networth` adds just the second to a spreadsheet that already has Transactions. The app owns the
 `raw_*`/`ref_*`/`meta` sheets; you own everything else. Run `--backfill` first, then run the plain sync daily.
 
     my-session-helper | bin/wps sheets sync --backfill

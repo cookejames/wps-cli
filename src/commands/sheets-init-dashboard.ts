@@ -1,5 +1,5 @@
 import { BadArgsError } from "../errors.ts";
-import { initDashboard } from "../sinks/dashboard.ts";
+import { initDashboard, initNetWorth, NETWORTH_SHEET } from "../sinks/dashboard.ts";
 import { SheetsSink } from "../sinks/sheets.ts";
 import type { CommandContext, CommandDef } from "./types.ts";
 
@@ -19,13 +19,18 @@ export function makeSink(ctx: CommandContext): SheetsSink {
 export const sheetsInitDashboard: CommandDef = {
   group: "sheets",
   name: "init-dashboard",
-  summary: "Create the Transactions dashboard sheet (one formula over raw_*/ref_* sheets)",
-  options: { spreadsheet: { type: "string" }, sheet: { type: "string" }, force: { type: "boolean" } },
+  summary: "Create the Transactions and Net worth dashboard sheets (formulas over raw_*/ref_* sheets; a Net worth sheet that exists is never touched; --only transactions|networth)",
+  options: { spreadsheet: { type: "string" }, sheet: { type: "string" }, force: { type: "boolean" }, only: { type: "string" } },
   needsSession: false,
   async run(ctx) {
+    const only = ctx.args.only as string | undefined;
+    if (only !== undefined && only !== "transactions" && only !== "networth") throw new BadArgsError("--only must be transactions or networth");
     const name = (ctx.args.sheet as string | undefined) ?? "Transactions";
     if (!name.trim()) throw new BadArgsError("--sheet must not be empty");
-    const data = await initDashboard(makeSink(ctx), name, ctx.args.force === true, (m) => ctx.log.warn(m));
+    const sink = makeSink(ctx);
+    const warn = (m: string) => ctx.log.warn(m);
+    const data: Record<string, unknown> = only === "networth" ? {} : { ...(await initDashboard(sink, name, ctx.args.force === true, warn)) };
+    if (only !== "transactions") data.netWorth = await initNetWorth(sink, NETWORTH_SHEET, warn);
     return { data };
   },
 };
