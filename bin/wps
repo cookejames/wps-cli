@@ -1,0 +1,5 @@
+#!/bin/sh
+# Resolve the real location (works through npm links / symlinks).
+SELF="$(readlink -f "$0")"
+ROOT="$(dirname "$(dirname "$SELF")")"
+exec node --import "$ROOT/node_modules/tsx/dist/esm/index.mjs" "$ROOT/src/cli.ts" "$@"

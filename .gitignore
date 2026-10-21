@@ -1,0 +1,8 @@
+node_modules
+logs
+*.log
+config.json
+*.local.json
+standard-categories*.json
+!test/fixtures/**
+.env

@@ -1,0 +1,10 @@
+{
+  "apiBase": "https://asm.example-tenant.com",
+  "webOrigin": "https://www.example-tenant.com",
+  "tenantId": "00000000000000000000000000000000",
+  "timezone": "Europe/London",
+  "windowDays": 45,
+  "logDir": "./logs",
+  "standardCategoriesFile": "/path/outside/repo/standard-categories.json",
+  "usePublicCategories": true
+}

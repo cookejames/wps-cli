@@ -1,0 +1,21 @@
+{
+  "name": "wps-cli",
+  "version": "0.1.0",
+  "description": "Unofficial CLI for Moneyhub-based personal finance web apps (undocumented web-app API)",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "bin": { "wps": "bin/wps" },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "leak-check": "scripts/leak-check.sh --all",
+    "hooks": "scripts/install-hooks.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
