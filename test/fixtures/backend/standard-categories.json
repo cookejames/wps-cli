@@ -1,0 +1,6 @@
+[
+  {"uid": 1, "key": "groceries", "group": 4, "externalId": "00000000-0000-4000-8000-000000000003"},
+  {"uid": 5, "key": "automotive", "group": 3, "externalId": "00000000-0000-4000-8000-000000000002"},
+  {"uid": 12, "key": "homeMaintenance", "group": 8, "externalId": "00000000-0000-4000-8000-000000000001"},
+  {"uid": 99, "key": "mystery", "group": 2, "externalId": null}
+]

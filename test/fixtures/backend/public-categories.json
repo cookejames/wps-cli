@@ -1,0 +1,6 @@
+{"data": [
+  {"categoryId": "std:00000000-0000-4000-8000-000000000001", "group": "group:8", "key": "homeMaintenance"},
+  {"categoryId": "std:00000000-0000-4000-8000-000000000002", "group": "group:3", "key": "automotive"},
+  {"categoryId": "std:00000000-0000-4000-8000-000000000003", "group": "group:4", "key": "groceries"},
+  {"categoryId": "std:00000000-0000-4000-8000-000000000004", "group": "group:1", "key": "salary"}
+]}
