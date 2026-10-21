@@ -200,12 +200,12 @@ export class SheetsSink {
   private formatRequests(def: TableDef, sheetId: number): unknown[] {
     const requests: unknown[] = [];
     def.cols.forEach((col, i) => {
+      // Columns without a format are reset to automatic: a grown grid can carry a stale format into new columns.
       const f = NUMBER_FORMATS[col.type];
-      if (!f) return;
       requests.push({
         repeatCell: {
           range: { sheetId, startRowIndex: 1, startColumnIndex: i, endColumnIndex: i + 1 },
-          cell: { userEnteredFormat: { numberFormat: f } },
+          cell: { userEnteredFormat: f ? { numberFormat: f } : {} },
           fields: "userEnteredFormat.numberFormat",
         },
       });
