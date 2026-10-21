@@ -172,7 +172,9 @@ export function mapAccount(raw: SourceAccount, now: Date = new Date(), tz = "Eur
     ...archiveOf(raw.closed, now),
     netWorthEnabled: raw.netWorthEnabled !== false,
     netWorthContribution: num(raw.netWorthContribution) ?? 100,
-    netWorthValue: money(round2(netWorthValue(raw, now, tz)), currency),
+    // Inactive (deleted) accounts are left out of the dashboard total, so they contribute 0 here too:
+    // summing netWorthValue over all accounts then equals the dashboard net worth.
+    netWorthValue: money(isActive(raw) ? round2(netWorthValue(raw, now, tz)) : 0, currency),
     yearlyAppreciation: num(raw.yearlyAppreciation),
     active: isActive(raw),
   };

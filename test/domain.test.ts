@@ -352,3 +352,10 @@ test("netWorthTotal: deleted excluded, archived 0, disabled 0", () => {
   ];
   assert.equal(netWorthTotal(raws, now), 200.2);
 });
+
+test("mapAccount: deleted accounts contribute 0 to netWorthValue so column sums match the total", () => {
+  const now = new Date("2026-10-21T12:00:00Z");
+  const a = mapAccount({ uid: "d", deleted: true, type: "savings", currency: "GBP", balances: [{ date: "2026-10-01", amount: 12.27 }] }, now);
+  assert.equal(a.netWorthValue.major, 0);
+  assert.equal(a.value?.major, 12.27);
+});
