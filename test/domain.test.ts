@@ -11,6 +11,7 @@ import { parseTextResources } from "../src/backends/internal-web/index.ts";
 import { fixture, NOW, here } from "./helpers.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { accountRow, trackIncomeLastChanged } from "../src/sinks/tables.ts";
 
 const index = (warn?: (m: string) => void) =>
   buildCategoryIndex({
@@ -358,4 +359,45 @@ test("mapAccount: deleted accounts contribute 0 to netWorthValue so column sums 
   const a = mapAccount({ uid: "d", deleted: true, type: "savings", currency: "GBP", balances: [{ date: "2026-10-01", amount: 12.27 }] }, now);
   assert.equal(a.netWorthValue.major, 0);
   assert.equal(a.value?.major, 12.27);
+});
+
+test("mapAccount: defined benefit pension fields and contributions", () => {
+  const a = mapAccount({
+    uid: "db-1", accountName: "DB scheme", type: "pension", subType: "definedBenefit", auto: false, currency: "GBP",
+    dateCreated: "2025-07-22T12:58:57.683Z", income: 1234.5, dateBenefitStarts: "2051-01-07",
+    balances: [{ date: "2025-07-22", amount: 0 }],
+    employeeContribution: { type: "amount", value: 100 }, employerContribution: { type: "percent" },
+  }, new Date("2026-10-21T12:00:00Z"));
+  assert.equal(a.subType, "definedBenefit");
+  assert.deepEqual(a.income, { value: 123450, major: 1234.5, currency: "GBP" });
+  assert.equal(a.incomeDate, null);
+  assert.equal(a.dateBenefitStarts, "2051-01-07");
+  assert.deepEqual(a.employeeContribution, { type: "amount", value: 100 });
+  assert.equal(a.employerContribution, null);
+  const row = accountRow(a, "Europe/London");
+  assert.equal(row.income, 1234.5);
+  assert.equal(row.incomeLastChanged, "2025-07-22"); // first seen: the creation date
+  assert.equal(row.employeeContributionType, "amount");
+  const withDate = accountRow(mapAccount({ uid: "db-2", type: "pension", income: 10, incomeDate: "2026-03-31", dateCreated: "2025-01-01T00:00:00Z" }), "Europe/London");
+  assert.equal(withDate.incomeLastChanged, "2026-03-31");
+  const dc = accountRow(mapAccount({ uid: "dc-1", type: "pension", subType: "definedContribution", dateCreated: "2025-01-01T00:00:00Z" }), "Europe/London");
+  assert.equal(dc.income, null);
+  assert.equal(dc.incomeLastChanged, null);
+});
+
+test("trackIncomeLastChanged: carried over while unchanged, today when the income changes", () => {
+  const rows = [
+    { id: "a", income: 100, incomeDate: null, incomeLastChanged: "2025-07-22" },
+    { id: "b", income: 250, incomeDate: null, incomeLastChanged: "2025-07-22" },
+    { id: "c", income: 50, incomeDate: null, incomeLastChanged: "2025-01-01" },
+    { id: "d", income: 75, incomeDate: "2026-03-31", incomeLastChanged: "2026-03-31" },
+    { id: "e", income: null, incomeDate: null, incomeLastChanged: null },
+  ];
+  const previous = [
+    { id: "a", income: 100, incomeLastChanged: "2026-05-01" },
+    { id: "b", income: 200, incomeLastChanged: "2026-05-01" },
+    { id: "d", income: 70, incomeLastChanged: "2026-05-01" },
+  ];
+  const out = trackIncomeLastChanged(rows, previous, "2026-10-21");
+  assert.deepEqual(out.map((r) => r.incomeLastChanged), ["2026-05-01", "2026-10-21", "2025-01-01", "2026-03-31", null]);
 });

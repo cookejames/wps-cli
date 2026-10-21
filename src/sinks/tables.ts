@@ -33,6 +33,9 @@ export const ACCOUNTS: TableDef = {
     c("daysSinceUpdate", "number"), c("deleted", "boolean"), c("netWorthContribution", "number"),
     c("archived", "boolean"), c("archivedAt", "datetime"),
     c("value", "amount"), c("netWorthValue", "amount"), c("netWorthEnabled", "boolean"), c("yearlyAppreciation", "number"), c("active", "boolean"),
+    // pensions (appended, so earlier column positions stay put)
+    c("subType"), c("income", "amount"), c("incomeDate", "date"), c("incomeLastChanged", "date"), c("dateBenefitStarts", "date"),
+    c("employeeContribution", "number"), c("employeeContributionType"), c("employerContribution", "number"), c("employerContributionType"),
   ],
 };
 export const RAW_BALANCES: TableDef = {
@@ -52,7 +55,7 @@ export const RAW_SNAPSHOTS: TableDef = {
   cols: [
     c("snapshot_date", "date"), c("accountId"), c("name"), c("type"), c("balance", "amount"), c("balanceDate", "date"), c("value", "amount"),
     c("netWorthValue", "amount"), c("netWorthEnabled", "boolean"), c("netWorthContribution", "number"), c("archived", "boolean"),
-    c("active", "boolean"), c("synced_at", "datetime"), c("source"),
+    c("active", "boolean"), c("synced_at", "datetime"), c("source"), c("income", "amount"),
   ],
 };
 export const META: TableDef = { sheet: "meta", cols: [c("key"), c("value", "any")] };
@@ -107,7 +110,29 @@ export const accountRow = (a: Account, tz: string): Row => ({
   archived: a.archived, archivedAt: iso(a.archivedAt, tz),
   value: a.value ? a.value.major : null, netWorthValue: a.netWorthValue.major, netWorthEnabled: a.netWorthEnabled,
   yearlyAppreciation: a.yearlyAppreciation, active: a.active,
+  subType: a.subType, income: a.income ? a.income.major : null, incomeDate: a.incomeDate, incomeLastChanged: a.incomeDate ?? (a.income ? dateOnly(a.dateCreated) : null),
+  dateBenefitStarts: a.dateBenefitStarts,
+  employeeContribution: a.employeeContribution?.value ?? null, employeeContributionType: a.employeeContribution?.type ?? null,
+  employerContribution: a.employerContribution?.value ?? null, employerContributionType: a.employerContribution?.type ?? null,
 });
+
+/**
+ * `incomeLastChanged`, tracked by the sync because the source only rarely holds a date for the income
+ * (`incomeDate`, used when present). The value is carried over from the previous raw_accounts while the income
+ * is unchanged, and becomes `today` when it changes. An income seen for the first time (no previous row with the
+ * column) starts at the account's creation date, the earliest it can have been entered, so staleness checks err
+ * on the stale side.
+ */
+export function trackIncomeLastChanged(rows: Row[], previous: readonly Row[], today: string): Row[] {
+  const prev = new Map(previous.map((r) => [String(r.id), r]));
+  return rows.map((r) => {
+    if (r.incomeDate || r.income === null || r.income === undefined) return r;
+    const p = prev.get(String(r.id));
+    if (!p || p.income === null || p.income === undefined) return r;
+    if (p.income === r.income) return p.incomeLastChanged ? { ...r, incomeLastChanged: p.incomeLastChanged } : r;
+    return { ...r, incomeLastChanged: today };
+  });
+}
 
 export const balanceRow = (e: BalanceHistoryEntry): Row => ({
   accountId: e.accountId, accountName: orNull(e.accountName), accountType: e.accountType, date: e.date, amount: e.amount,
@@ -119,6 +144,7 @@ export const snapshotRow = (a: Account, day: string, syncedAt: string, tz: strin
   snapshot_date: day, accountId: a.id, name: orNull(a.name), type: a.type, balance: a.balance ? a.balance.major : null, balanceDate: dateOnly(a.balanceDate),
   value: a.value ? a.value.major : null, netWorthValue: a.netWorthValue.major, netWorthEnabled: a.netWorthEnabled,
   netWorthContribution: a.netWorthContribution, archived: a.archived, active: a.active, synced_at: iso(syncedAt, tz), source,
+  income: a.income ? a.income.major : null,
 });
 
 /** Typed row -> cell. Dates and datetimes become serial numbers; everything else is sent as-is (RAW). */

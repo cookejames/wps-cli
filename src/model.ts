@@ -83,6 +83,25 @@ export interface Account {
   yearlyAppreciation: number | null;
   /** not deleted and its connection is not deleted */
   active: boolean;
+  /** when the account was added (ISO), if the source says */
+  dateCreated: string | null;
+  /** pension: "definedContribution" | "definedBenefit" (null for other accounts) */
+  subType: string | null;
+  /** defined benefit pension: annual income */
+  income: Money | null;
+  /** defined benefit pension: the "as of" date the source holds for the income, if any */
+  incomeDate: string | null;
+  /** defined benefit pension: when the benefit starts (YYYY-MM-DD) */
+  dateBenefitStarts: string | null;
+  /** pension contributions as the source holds them: a percentage or an amount */
+  employeeContribution: Contribution | null;
+  employerContribution: Contribution | null;
+}
+
+export interface Contribution {
+  /** "percent" or "amount" */
+  type: string;
+  value: number;
 }
 
 /** Entry of the extracted internal numeric standard-category table. */

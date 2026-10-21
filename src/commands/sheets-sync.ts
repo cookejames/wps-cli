@@ -8,7 +8,7 @@ import { mergeByUid } from "../domain/merge.ts";
 import { mapTransaction } from "../domain/transactions.ts";
 import { canonicalIso } from "../sinks/serial.ts";
 import {
-  ACCOUNTS, accountRow, balanceRow, CATEGORIES, categoryRow, decodeRows, META, networthRow, PROJECTS, projectRow, RAW_BALANCES, RAW_NETWORTH, RAW_SNAPSHOTS, snapshotRow, TRANSACTIONS, transactionRow, type Row,
+  ACCOUNTS, accountRow, balanceRow, CATEGORIES, categoryRow, decodeRows, META, networthRow, PROJECTS, projectRow, RAW_BALANCES, RAW_NETWORTH, RAW_SNAPSHOTS, snapshotRow, trackIncomeLastChanged, TRANSACTIONS, transactionRow, type Row,
 } from "../sinks/tables.ts";
 import { makeSink } from "./sheets-init-dashboard.ts";
 import type { CommandDef } from "./types.ts";
@@ -95,7 +95,13 @@ export const sheetsSync: CommandDef = {
     }
     rows.sort(byDateDesc);
 
-    const accountRows = rawAccounts.map((r) => accountRow(mapAccount(r, now, tz), tz));
+    // incomeLastChanged is carried over from the current raw_accounts (once it has the column)
+    let previousAccounts: Row[] = [];
+    if (!dryRun && (await sink.listSheets()).some((s) => s.title === ACCOUNTS.sheet)) {
+      const grid = await sink.readValues(ACCOUNTS.sheet);
+      if (grid.length > 0 && grid[0]!.map(String).includes("incomeLastChanged")) previousAccounts = decodeRows(ACCOUNTS, grid, tz);
+    }
+    const accountRows = trackIncomeLastChanged(rawAccounts.map((r) => accountRow(mapAccount(r, now, tz), tz)), previousAccounts, today);
     const categoryRows = index.categories.map(categoryRow);
     const projectRows = projects.map(projectRow);
 

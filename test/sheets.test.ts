@@ -184,7 +184,8 @@ test("sync: backfill, then a window sync merges and keeps rows outside the windo
   assert.equal(typeof meta.net_worth, "number");
   assert.equal(meta.net_worth_as_of, "2026-10-21");
   const ah = grid(dir, "raw_accounts")[0];
-  assert.deepEqual(ah.slice(-7), ["archived", "archivedAt", "value", "netWorthValue", "netWorthEnabled", "yearlyAppreciation", "active"]);
+  assert.deepEqual(ah.slice(15, 22), ["archived", "archivedAt", "value", "netWorthValue", "netWorthEnabled", "yearlyAppreciation", "active"]);
+  assert.deepEqual(ah.slice(22, 27), ["subType", "income", "incomeDate", "incomeLastChanged", "dateBenefitStarts"]);
   // no sensitive account fields reach the sheet
   const dump = JSON.stringify(state(dir).sheets.map((s: any) => s.values));
   for (const bad of ["SENSITIVE", "iban", "sortCode", "parties"]) assert.ok(!dump.includes(bad), bad);
@@ -389,7 +390,7 @@ test("sync: raw_account_snapshots is append-only across days; a same-day rerun r
   assert.deepEqual(g3.slice(0, 6), g1);
   assert.equal(day(g3, "2026-10-22").find((r) => r[1] === "acc-auto")![4], 77);
   const rerun = calls(dir).slice(before).filter((c) => JSON.stringify(c).includes("raw_account_snapshots"));
-  assert.ok(rerun.some((c) => c.method === "values clear" && c.params.range === "'raw_account_snapshots'!A7:N"));
+  assert.ok(rerun.some((c) => c.method === "values clear" && c.params.range === "'raw_account_snapshots'!A7:O"));
   assert.ok(!rerun.some((c) => c.method === "values update"), "no rewrite of the table");
   const meta = Object.fromEntries(grid(dir, "meta").slice(1).map((x: any[]) => [x[0], x[1]]));
   assert.equal(meta.snapshots_appended, 5);

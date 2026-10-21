@@ -1,5 +1,5 @@
 import type { SourceAccount } from "../backends/backend.ts";
-import type { Account, Money } from "../model.ts";
+import type { Account, Contribution, Money } from "../model.ts";
 import { toLondonDate as toDateIn } from "./dates.ts";
 import { toMinor } from "./transactions.ts";
 
@@ -197,7 +197,24 @@ export function mapAccount(raw: SourceAccount, now: Date = new Date(), tz = "Eur
     netWorthValue: money(isActive(raw) ? round2(netWorthValue(raw, now, tz)) : 0, currency),
     yearlyAppreciation: num(raw.yearlyAppreciation),
     active: isActive(raw),
+    dateCreated: str(raw.dateCreated),
+    subType: str(raw.subType),
+    income: num(raw.income) === null ? null : money(num(raw.income)!, currency),
+    incomeDate: dateStr(raw.incomeDate),
+    dateBenefitStarts: dateStr(raw.dateBenefitStarts),
+    employeeContribution: contribution(raw.employeeContribution),
+    employerContribution: contribution(raw.employerContribution),
   };
+}
+
+const dateStr = (v: unknown): string | null => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
+
+function contribution(v: unknown): Contribution | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const value = num(o.value);
+  const type = str(o.type);
+  return value === null || type === null ? null : { type, value };
 }
 
 /** manual accounts not updated for at least `days` days; never-updated counts as stale. */

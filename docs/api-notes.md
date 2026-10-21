@@ -34,7 +34,10 @@ Responses are `{"data":{"result":[...],"meta":{}}}` unless noted.
    currentBalance `{amount (major), date: YYYY-MM-DD, type?}`,
    balances `[{date, amount (major), type?, tag?}]` oldest to newest,
    providerLastUpdated (ISO; absent on manual accounts), lastTransactionDate,
-   netWorthContribution, AER, closed (ISO datetime, or absent: the account was archived in the web app on that date; `closedReason` may accompany it). Sensitive and **not output by default**: parties,
+   netWorthContribution, AER, subType (pensions: definedContribution|definedBenefit), income (defined benefit: annual
+   income, major units), incomeDate (optional "as of" date for it; the web app shows "Annual income (as of …)" but its
+   edit form doesn't set it), dateBenefitStarts, employeeContribution/employerContribution `{type: percent|amount,
+   value}`, closed (ISO datetime, or absent: the account was archived in the web app on that date; `closedReason` may accompany it). Sensitive and **not output by default**: parties,
    sortCodeAccountNumber, iban, providerAccountIdentifications.
    **`balances[]` history semantics.** Each item is `{date, amount, type?, tag?}`. An entry is recorded only when the
    value changes (cash/savings go back about three years with up to ~1,200 entries; investments, pensions and

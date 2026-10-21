@@ -205,7 +205,10 @@ become a formula. Numbers and booleans are JSON numbers/booleans. Dates are Shee
 - `raw_accounts`: id, name, provider, type, accountType, auto, manual, balance, currency, balanceDate (date),
   providerLastUpdated (datetime), lastUpdated (date), daysSinceUpdate, deleted, netWorthContribution, archived, archivedAt (datetime), value,
   netWorthValue, netWorthEnabled, yearlyAppreciation, active (appended after the older columns; `balance` is the last recorded
-  balance, `value` the dashboard value)
+  balance, `value` the dashboard value), then the pension columns: subType (`definedContribution` | `definedBenefit`),
+  income (a defined benefit pension's annual income), incomeDate (date; the source's "as of" date for the income, usually
+  blank), incomeLastChanged (date, see below), dateBenefitStarts (date), employeeContribution, employeeContributionType,
+  employerContribution, employerContributionType (`percent` | `amount`, as the source holds them)
   (no parties, sort codes, IBANs or account numbers).
 - `raw_balances`: accountId, accountName, accountType, date (date), amount, entryType, tag, active, archived. One row per
   `balances[]` entry of every account (deleted and archived ones included, flagged). Rebuilt every run.
@@ -213,8 +216,12 @@ become a formula. Numbers and booleans are JSON numbers/booleans. Dates are Shee
   other, adjusted (boolean). One row per day from the first balance date to today (the `networth history` series,
   with `historyExclusions` applied). Rebuilt every run. Meta gains `networth_adjusted_days` and `history_exclusions`.
 - `raw_account_snapshots`: snapshot_date (date), accountId, name, type, balance, balanceDate (date), value, netWorthValue,
-  netWorthEnabled, netWorthContribution, archived, active, synced_at (datetime), source (`recorded` | `rebuilt`).
-  **Append-only**, see below.
+  netWorthEnabled, netWorthContribution, archived, active, synced_at (datetime), source (`recorded` | `rebuilt`), income (defined
+  benefit pensions; blank on rebuilt rows). **Append-only**, see below.
+- `incomeLastChanged` is tracked by the sync, since the source rarely dates the income: the source's `incomeDate`
+  when set; otherwise carried over from the previous `raw_accounts` while the income is unchanged, and today's date when
+  it changes. An income seen for the first time starts at the account's creation date, the earliest it can have been
+  entered, so a staleness check errs on the stale side.
 - `meta` (key | value): last_run_at, mode, window_from, window_to, transactions_total, added, updated, unchanged,
   missing_from_source, accounts_total, categories_total, projects_total, balances_total, networth_days, networth_from, snapshots_appended, net_worth (the net worth total), net_worth_as_of, wps_cli_version, status.
 

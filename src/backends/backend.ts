@@ -50,6 +50,15 @@ export interface SourceAccount {
   netWorthEnabled?: boolean | null;
   yearlyAppreciation?: number | null;
   deletedConnection?: boolean | null;
+  /** pension: "definedContribution" | "definedBenefit" */
+  subType?: string | null;
+  /** defined benefit pension: annual income (major units) */
+  income?: number | null;
+  /** defined benefit pension: the date the income was valued at (often missing) */
+  incomeDate?: string | null;
+  dateBenefitStarts?: string | null;
+  employeeContribution?: unknown;
+  employerContribution?: unknown;
   [k: string]: unknown;
 }
 
