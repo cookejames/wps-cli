@@ -24,11 +24,15 @@ export interface SinkOptions {
   timezone?: string;
   log?: Logger;
   backoffMs?: number;
+  /** wait before retrying a per-minute quota error (429); default 65 s so the minute window resets */
+  quotaBackoffMs?: number;
   maxJsonBytes?: number;
 }
 
 type Cell = string | number | boolean;
 const TRANSIENT = /\b(429|5\d\d)\b|rate.?limit|quota|unavailable|backend error|internal error|timed? ?out|econnreset/i;
+const QUOTA = /\b429\b|quota|rate.?limit/i;
+const QUOTA_RETRIES = 3;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export const quoteSheet = (name: string): string => `'${name.replace(/'/g, "''")}'`;
@@ -40,6 +44,7 @@ export class SheetsSink {
   private readonly tz: string;
   private readonly log?: Logger;
   private readonly backoffMs: number;
+  private readonly quotaBackoffMs: number;
   private readonly maxJson: number;
 
   constructor(o: SinkOptions) {
@@ -48,6 +53,7 @@ export class SheetsSink {
     this.tz = o.timezone ?? "Europe/London";
     this.log = o.log;
     this.backoffMs = o.backoffMs ?? 2000;
+    this.quotaBackoffMs = o.quotaBackoffMs ?? 65_000;
     this.maxJson = o.maxJsonBytes ?? MAX_JSON_BYTES;
   }
 
@@ -91,7 +97,13 @@ export class SheetsSink {
       }
       if (failure === undefined) return result;
       const msg = redact(failure).replace(/\s+/g, " ").slice(0, 300);
-      if (attempt === 0 && TRANSIENT.test(`${failure} ${r.stderr}`)) {
+      const why = `${failure} ${r.stderr}`;
+      if (QUOTA.test(why) && attempt < QUOTA_RETRIES) {
+        this.log?.warn(`${msg}; waiting ${Math.round(this.quotaBackoffMs / 1000)}s for the quota to reset (retry ${attempt + 1} of ${QUOTA_RETRIES})`);
+        await sleep(this.quotaBackoffMs);
+        continue;
+      }
+      if (attempt === 0 && TRANSIENT.test(why)) {
         this.log?.warn(`${msg}; retrying once`);
         await sleep(this.backoffMs);
         continue;

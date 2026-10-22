@@ -7,12 +7,14 @@ export function makeSink(ctx: CommandContext): SheetsSink {
   const id = (ctx.args.spreadsheet as string | undefined) ?? ctx.config.spreadsheetId;
   if (!id) throw new BadArgsError("no spreadsheet: pass --spreadsheet <id> or set spreadsheetId in the config");
   const backoff = Number(ctx.env.WPS_GWS_BACKOFF_MS);
+  const quotaBackoff = Number(ctx.env.WPS_GWS_QUOTA_BACKOFF_MS);
   return new SheetsSink({
     spreadsheetId: id,
     bin: ctx.env.WPS_GWS_BIN || "gws",
     timezone: ctx.config.timezone,
     log: ctx.log,
     ...(ctx.env.WPS_GWS_BACKOFF_MS !== undefined && Number.isFinite(backoff) ? { backoffMs: backoff } : {}),
+    ...(ctx.env.WPS_GWS_QUOTA_BACKOFF_MS !== undefined && Number.isFinite(quotaBackoff) ? { quotaBackoffMs: quotaBackoff } : {}),
   });
 }
 

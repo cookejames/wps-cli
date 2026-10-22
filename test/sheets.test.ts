@@ -14,7 +14,7 @@ import { SinkError } from "../src/errors.ts";
 const FAKE_GWS = join(here, "fake-gws.mjs");
 
 function env(dir: string, extra: Record<string, string> = {}) {
-  return { FAKE_GWS_STATE: join(dir, "state.json"), WPS_GWS_BIN: FAKE_GWS, WPS_GWS_BACKOFF_MS: "5", ...extra };
+  return { FAKE_GWS_STATE: join(dir, "state.json"), WPS_GWS_BIN: FAKE_GWS, WPS_GWS_BACKOFF_MS: "5", WPS_GWS_QUOTA_BACKOFF_MS: "5", ...extra };
 }
 function newDir(): string {
   return mkdtempSync(join(tmpdir(), "wps-sheets-"));
@@ -260,6 +260,28 @@ test("sync needs a spreadsheet id; gws failures are sink errors (exit 4); one re
   const n = calls(dir).length;
   assert.ok(n > 0);
   assert.match(bad.json().reason, /403/);
+});
+
+test("per-minute quota errors (429) are retried up to 3 times, then are sink errors", () => {
+  const dir = newDir();
+  seed(dir, [{ title: "Sheet1" }]);
+  const st = state(dir);
+  st.failNext = 3;
+  st.failCode = 429;
+  writeFileSync(join(dir, "state.json"), JSON.stringify(st));
+  const ok = wps(["sheets", "init-dashboard", "--spreadsheet", "S"], dir);
+  assert.equal(ok.code, 0, ok.out + ok.err);
+  assert.match(ok.err, /retry 3 of 3/);
+
+  const dir2 = newDir();
+  seed(dir2, [{ title: "Sheet1" }]);
+  const st2 = state(dir2);
+  st2.failNext = 4;
+  st2.failCode = 429;
+  writeFileSync(join(dir2, "state.json"), JSON.stringify(st2));
+  const bad = wps(["sheets", "init-dashboard", "--spreadsheet", "S"], dir2);
+  assert.equal(bad.code, 4);
+  assert.match(bad.json().reason, /429/);
 });
 
 test("init-dashboard renames an empty Sheet1, refuses a non-empty Transactions without --force", () => {
