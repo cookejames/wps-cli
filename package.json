@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Unofficial CLI for Moneyhub-based personal finance web apps (undocumented web-app API)",
   "type": "module",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "private": true,
   "bin": { "wps": "bin/wps" },
   "engines": { "node": ">=22" },
